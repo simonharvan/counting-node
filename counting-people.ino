@@ -50,7 +50,6 @@ const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the 
 #define TA_SHIFT 8 //Default shift for MLX90640 in open air
 
 static float mlx90640To[768];
-uint16_t mlx90640Frame[834];
 paramsMLX90640 mlx90640;
 
 char textToSend[4800];
@@ -86,7 +85,7 @@ void setup()
     Serial.println("Parameter extraction failed");
 
   //Once params are extracted, we can release eeMLX90640 array
-  MLX90640_SetRefreshRate(MLX90640_address, 0x04); //Set rate to 8Hz
+  MLX90640_SetRefreshRate(MLX90640_address, 0x05); //Set rate to 8Hz
 
   for (uint8_t t = 4; t > 0; t--) {
     Serial.printf("[SETUP] WAIT %d...\n", t);
@@ -106,10 +105,15 @@ void loop()
   long stopTime;
   for (byte x = 0 ; x < 2 ; x++)
   {
-    mlx90640Frame[0] = 0;
-    mlx90640Frame[33] = 0;
+    uint16_t mlx90640Frame[834];
     int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame);
     stopTime = millis();
+    if (status < 0)
+    {
+      Serial.print("GetFrame Error: ");
+      Serial.println(status);
+    }
+
     float vdd = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
     float Ta = MLX90640_GetTa(mlx90640Frame, &mlx90640);
 
@@ -121,7 +125,7 @@ void loop()
   
 
   Serial.print("Read rate: ");
-  Serial.print( stopTime - startTime);
+  Serial.print(stopTime - startTime);
   Serial.println(" ms");
 
   memset(textToSend, 0, sizeof(textToSend));
