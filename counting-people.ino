@@ -42,8 +42,8 @@
 
 #include <WiFiClient.h>
 
-#define SDA_PIN 2
-#define SCL_PIN 3
+#define SDA_PIN 0 //is ok with 0 too
+#define SCL_PIN 4
 
 const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the MLX90640
 
@@ -53,14 +53,16 @@ static float mlx90640To[768];
 paramsMLX90640 mlx90640;
 
 char textToSend[4800];
+byte page = 0;
 //long counter = 0;
 
 ESP8266WiFiMulti WiFiMulti;
 
+
 void setup()
 {
 	delay(1000);
-	Wire.begin(0, 4);
+	Wire.begin(SDA_PIN, SCL_PIN);
 	Wire.setClock(400000);
 
 	Serial.begin(115200);
@@ -101,41 +103,100 @@ void setup()
 
 void loop()
 {
+	long startTime = millis();  
+	for (byte i = 0; i < 2; ++i){
+		uint16_t mlx90640Frame[835];
+		int status = GetFrameData(MLX90640_address, mlx90640Frame);
+		if (status < 0)
+		{
+			Serial.print("GetFrame Error: ");
+			Serial.println(status);
+		}
+		float vdd = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
+		float Ta = MLX90640_GetTa(mlx90640Frame, &mlx90640);
 
-	long startTime = millis();
+	    float tr = Ta - TA_SHIFT; //Reflected temperature based on the sensor ambient temperature
+	    float emissivity = 0.95;
+			
+	    MLX90640_CalculateTo(mlx90640Frame, &mlx90640, emissivity, tr, mlx90640To);
 
-	uint16_t mlx90640Frame[834];
-
-	int status = getFrameData(MLX90640_address, mlx90640Frame);
-	if (status < 0)
-	{
-		Serial.print("GetFrame Error: ");
-		Serial.println(status);
 	}
-	float vdd = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
-	float Ta = MLX90640_GetTa(mlx90640Frame, &mlx90640);
+	
+	long stopTime = millis();
+	Serial.print("Read rate: ");
+	Serial.print(stopTime - startTime);
+	Serial.println(" ms");
 
-    float tr = Ta - TA_SHIFT; //Reflected temperature based on the sensor ambient temperature
-    float emissivity = 0.95;
+    
 
-    MLX90640_CalculateTo(mlx90640Frame, &mlx90640, emissivity, tr, mlx90640To);
+   	doSomethingWithResult(mlx90640To);
+}
 
-    long stopTime = millis();
+int GetFrameData(uint8_t slaveAddr, uint16_t *frameData)
+{
+    uint16_t dataReady = 1;
+    uint16_t controlRegister;
+    uint16_t statusRegister;
+    int error = 1;
+    
+    dataReady = 0;
+    
+    while(dataReady == 0)
+    {
+        error = MLX90640_I2CRead(slaveAddr, 0x8000, 1, &statusRegister);
+        if(error != 0)
+        {
+            return error;
+        }    
+        dataReady = statusRegister & 0x0008 && (page != statusRegister & 0x0001);
 
+    }
+    
+    error = MLX90640_I2CRead(slaveAddr, 0x0400, 832, frameData); 
+    if(error != 0)
+    {
+        return error;
+    }
+    error = MLX90640_I2CRead(slaveAddr, 0x8000, 1, &statusRegister);
+    if(error != 0)
+    {
+        return error;
+    }    
+    
+    statusRegister &= ~(1UL << 5);
+    error = MLX90640_I2CWrite(slaveAddr, 0x8000, statusRegister);
+    if(error == -1)
+    {
+    	return error;
+    }
 
-    Serial.print("Read rate: ");
-    Serial.print(stopTime - startTime);
-    Serial.println(" ms");
+    
+    
+       
+    
+    error = MLX90640_I2CRead(slaveAddr, 0x800D, 1, &controlRegister);
+    frameData[832] = controlRegister;
+    frameData[833] = statusRegister & 0x0001;
+    page = statusRegister & 0x0001;
+    
+    if(error != 0)
+    {
+        return error;
+    }
+    
+    return frameData[833];    
+}
 
-    memset(textToSend, 0, sizeof(textToSend));
+void doSomethingWithResult(float *mlx90640To) {
+	memset(textToSend, 0, sizeof(textToSend));
     strcat(textToSend, "{\"text\":\"");
 
     char tmp[7];
 
     for (int x = 0 ; x < 768 ; x++)
     {
-    	Serial.print(mlx90640To[x], 2);
-    	Serial.print(",");
+    	// Serial.print(mlx90640To[x], 2);
+    	// Serial.print(",");
     	memset(tmp, 0, sizeof(tmp));
     	ftoa(mlx90640To[x], tmp, 2);
 
@@ -144,29 +205,12 @@ void loop()
     }
     strcat(textToSend, "\"}");
 
-    Serial.println("");
+    // Serial.println("");
 
-//  sendData(textToSend);
+ 	// sendData(textToSend);
 }
 
-int getFrameData(uint8_t slaveAddr, uint16_t *frameData) {
-  	uint16_t dataReady = 1;
-  	uint16_t controlRegister1;
-  	uint16_t statusRegister;
-  	int error = 1;
-  	uint8_t cnt = 0;
 
-  	dataReady = 0;
-  	while(dataReady == 0)
-  	{
-  		error = MLX90640_I2CRead(slaveAddr, 0x8000, 1, &statusRegister);
-  		if(error != 0)
-  		{
-  			return error;
-  		}    
-  		dataReady = statusRegister & 0x0008;
-  	}   
-  }
 
 //Returns true if the MLX90640 is detected on the I2C bus
 boolean isConnected() {
