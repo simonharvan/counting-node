@@ -37,10 +37,10 @@ void printMatrix(float *src, int width, int height) {
 		for (int j = 0; j < width; ++j) 
 		{
 			// printf("%04.5f, ", src[i * width + j]);
-			// fprintf(file, "%f, ", src[i * width + j]);
+			fprintf(file, "%f, ", src[i * width + j]);
 		}
 		// printf("\n");
-		// fprintf(file, "\n");
+		fprintf(file, "\n");
 	}
 }
 
