@@ -94,8 +94,9 @@ void applyGaussian(float *src, int widthOfImage, int heightOfImage, float *resul
                 	int height = h + i; 
                 	int width = w + j;
 					float source = getSourceGaussian(src, height, width, heightOfImage, widthOfImage);
-               		printf("%d, %d\n", height, width);
+               		printf("%d, %d - %f * %f\n", height, width, gausian[h + 2][w + 2], source);
                 	result[i * width + j] += gausian[h + 2][w + 2] * source;
+                	printf("Result: %f\n", gausian[h + 2][w + 2] * source);
 				}
 			}
 		}
