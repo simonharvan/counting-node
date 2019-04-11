@@ -8,6 +8,7 @@
 void normalize(float *src, int size) {
 	float min = 99999999999;
 	float max = -99999999999;
+
 	for (int i = 0; i < size; ++i)
 	{
 		if (src[i] < min) {
@@ -21,17 +22,13 @@ void normalize(float *src, int size) {
 	for (int i = 0; i < size; ++i)
 	{
 		src[i] = (src[i] - min)/(max - min);
+
 	}
+
+	
 }
 
-void printMatrix(float *src, int width, int height) {
-	static const char filename[] = "output";
-	FILE *file = fopen ( filename, "w+" );
-	if ( file == NULL ) {
-		perror ( filename ); /* why didn't the file open? */
-		return;
-	}
-
+void printMatrix(FILE *file, float *src, int width, int height) {
 	for (int i = 0; i < height; ++i)
 	{
 		for (int j = 0; j < width; ++j) 
@@ -40,43 +37,51 @@ void printMatrix(float *src, int width, int height) {
 			fprintf(file, "%f, ", src[i * width + j]);
 		}
 		// printf("\n");
-		fprintf(file, "\n");
 	}
+	fprintf(file, "\n");
 }
 
 //1 2 3
 //4   6
 //7 8 9
-float getSourceGaussian(float *src, int height,int width,int heightOfImage,int widthOfImage) {
+float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage) {
 	float source = src[height * widthOfImage + width];
 
 	// 1
 	if (height < 0 && width < 0) {
-		source = src[(heightOfImage + height) * widthOfImage + (widthOfImage + width)];
+		// source = src[(heightOfImage + height) * widthOfImage + (widthOfImage + width)];
+		source = 0.5;
 	// 2
 	} else if (height < 0 && width >= 0 && width < widthOfImage) {
-		source = src[(heightOfImage + height) * widthOfImage + width];
+		// source = src[(heightOfImage + height) * widthOfImage + width];
+		source = 0.5;
  	// 3
 	} else if (height < 0 && width >= widthOfImage) {
-		source = src[(heightOfImage + height) * widthOfImage + (width - widthOfImage)];
+		// source = src[(heightOfImage + height) * widthOfImage + (width - widthOfImage)];
+		source = 0.5;
 	// 4 
 	} else if (height >= 0 && height < heightOfImage && width < 0) {
-		source = src[height * widthOfImage + (widthOfImage + width)];
+		// source = src[height * widthOfImage + (widthOfImage + width)];
+		source = 0.5;
 	// 6
 	} else if(height >= 0 && height < heightOfImage && width >= widthOfImage) {
-		source = src[height * widthOfImage + (width - widthOfImage)];
+		// source = src[height * widthOfImage + (width - widthOfImage)];
+		source = 0.5;
 
 	// 7
 	} else if(height >= heightOfImage && width < 0) {
-		source = src[(height - heightOfImage) * widthOfImage + (widthOfImage + width)];
+		// source = src[(height - heightOfImage) * widthOfImage + (widthOfImage + width)];
+		source = 0.5;
 	
 	// 8
 	} else if(height >= heightOfImage && width >= 0 && width < widthOfImage) {
-		source = src[(height - heightOfImage) * widthOfImage + width];
+		// source = src[(height - heightOfImage) * widthOfImage + width];
+		source = 0.5;
 
 	// 9
 	} else if(height >= heightOfImage && width >= widthOfImage) {
-		source = src[(height - heightOfImage) * widthOfImage + (width - widthOfImage)];
+		// source = src[(height - heightOfImage) * widthOfImage + (width - widthOfImage)];
+		source = 0.5;
 	}
 	return source;
 }
@@ -87,23 +92,78 @@ void applyGaussian(float *src, int widthOfImage, int heightOfImage, float *resul
 	{
 		for (int j = 0; j < widthOfImage; ++j)
 		{
-			printf("\n--------%d, %d------------\n\n", i, j);
 			for (int h=-2; h < gausianDim - 2 ; h++) {
                 for (int w=-2; w < gausianDim - 2 ; w++) {
-                	
-                	int height = h + i; 
+
+					int height = h + i; 
                 	int width = w + j;
-					float source = getSourceGaussian(src, height, width, heightOfImage, widthOfImage);
-               		printf("%d, %d - %f * %f\n", height, width, gausian[h + 2][w + 2], source);
-                	result[i * width + j] += gausian[h + 2][w + 2] * source;
-                	printf("Result: %f\n", gausian[h + 2][w + 2] * source);
-                	printf("Result2: %f\n", result[i * width + j]);
+                	
+					float source = getSourceGaussian(src, width, height, widthOfImage, heightOfImage);
+	               	result[i * widthOfImage + j] = gausian[h + 2][w + 2] * source;
+	               	
 				}
 			}
+
 		}
 	}
 }
-	
+
+float findAvg(float *src, int size) {
+	float sum = 0;
+	for (int i = 0; i < size; ++i)
+	{
+		sum += src[i];
+	}
+	return sum/size;
+}
+
+void divideByAvg(float *src, int size, float avg, float *background, float *foreground, int *bckSize, int *foreSize) { 
+	for (int i = 0; i < size; ++i)
+	{
+		if (src[i] <= avg) {
+			background[*bckSize] = src[i];
+			*bckSize = *bckSize + 1; 
+		}else {
+			foreground[*foreSize] = src[i];
+			*foreSize = *foreSize + 1;
+		}
+	}
+}
+
+float findThreshold(float *src, int size) {
+	float background[768];
+	float foreground[768];
+	int foreSize;
+	int bckSize;
+	float step = 1;
+	float minimumStep = 0.1;
+	float bckAvg;
+	float foreAvg;
+	float threshold = findAvg(src, size);
+	float newThreshold;
+	while (step > minimumStep){
+		foreSize = 0.0f;
+		bckSize = 0.0f;
+		divideByAvg(src, size, threshold, background, foreground, &bckSize, &foreSize);
+		bckAvg = findAvg(background, bckSize);
+		foreAvg = findAvg(foreground, foreSize);
+		newThreshold = foreAvg - bckAvg;
+		step = fabs(threshold - newThreshold);
+		threshold = newThreshold;
+	}
+	return threshold;
+}
+
+void setThreshold(float *src, int size, float threshold) {
+	for (int i = 0; i < size; ++i)
+	{
+		if (src[i] <= threshold) {
+			src[i] = 0;
+		}else {
+			src[i] = 1;
+		}
+	}
+}
 
 int main ( void )
 {
@@ -121,15 +181,33 @@ int main ( void )
 		return 0;
 	}
 
+	static const char outputFilename[] = "output";
+	FILE *outputfile = fopen ( outputFilename, "a" );
+	if ( outputfile == NULL ) {
+		perror ( outputFilename ); /* why didn't the file open? */
+		return 0;
+	}
+
+	static const char normalizedFilename[] = "normalize-output";
+	FILE *normalizeFile = fopen ( normalizedFilename, "a" );
+	if ( normalizeFile == NULL ) {
+		perror ( normalizedFilename ); /* why didn't the file open? */
+		return 0;
+	}
 
 	char line [ 12000 ]; /* or other suitable maximum line size */
-	char *numberStrings[768];
+	
 	float numbers[768];
 	float afterGausian[768];
-	int i = 0;
-	// while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
-	// {
+	memset(afterGausian, 0, 768);
+	
+	while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
+	{
+		// for (int j = 0; j < 2; ++j)
 		fgets ( line, sizeof line, file );
+		char *numberStrings[768];
+		memset(numberStrings, 0, 768);
+		int i = 0;
 		char *p = strtok( line, ",");
 		while (p != NULL) {
 			numberStrings[i++] = p;
@@ -141,11 +219,18 @@ int main ( void )
 		}
 		// free(numberStrings);
 		// free(line);
+		
 		normalize(numbers, 768);
-		// printMatrix(normalized, 32, 24);
+		printMatrix(normalizeFile, numbers, 32, 24);
 		applyGaussian(numbers, 32, 24, afterGausian, gausian);
-		printMatrix(afterGausian, 32, 24);
-	// }
+		float threshold = findThreshold(afterGausian, 768);
+		// float threshold = findAvg(afterGausian, 768);
+		
+		setThreshold(afterGausian, 768, threshold);
+		printMatrix(outputfile, afterGausian, 32, 24);
+	}
+	fclose ( outputfile );
+	fclose ( normalizeFile );
 	fclose ( file );
 	
 	return 0;
