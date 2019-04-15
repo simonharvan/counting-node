@@ -17,6 +17,7 @@
 #include "MLX90640_I2C_Driver.h"
 #include "MLX90640_API.h"
 #include <math.h>
+#include <Arduino.h>
 
 void ExtractVDDParameters(uint16_t *eeData, paramsMLX90640 *mlx90640);
 void ExtractPTATParameters(uint16_t *eeData, paramsMLX90640 *mlx90640);
@@ -45,13 +46,12 @@ int MLX90640_DumpEE(uint8_t slaveAddr, uint16_t *eeData)
 
 int MLX90640_GetFrameData(uint8_t slaveAddr, uint16_t *frameData)
 {
-    uint16_t dataReady = 1;
+    uint16_t dataReady = 0;
     uint16_t controlRegister1;
     uint16_t statusRegister;
     int error = 1;
     uint8_t cnt = 0;
     
-    dataReady = 0;
     while(dataReady == 0)
     {
         error = MLX90640_I2CRead(slaveAddr, 0x8000, 1, &statusRegister);
@@ -60,13 +60,15 @@ int MLX90640_GetFrameData(uint8_t slaveAddr, uint16_t *frameData)
             return error;
         }    
         dataReady = statusRegister & 0x0008;
-    }       
-        
+    }  
+
+    
     while(dataReady != 0 && cnt < 5)
     { 
         error = MLX90640_I2CWrite(slaveAddr, 0x8000, 0x0030);
         if(error == -1)
         {
+            Serial.println("0x8000 weird things");
             return error;
         }
             
@@ -89,7 +91,14 @@ int MLX90640_GetFrameData(uint8_t slaveAddr, uint16_t *frameData)
     {
         return -8;
     }    
-    
+
+    error = MLX90640_I2CWrite(slaveAddr, 0x8000, statusRegister & 0xFFF7);
+    if(error != 0)
+    {
+        Serial.println("0x8000 after data register not able to write");
+        return error;
+    }
+        
     error = MLX90640_I2CRead(slaveAddr, 0x800D, 1, &controlRegister1);
     frameData[832] = controlRegister1;
     frameData[833] = statusRegister & 0x0001;

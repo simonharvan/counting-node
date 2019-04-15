@@ -17,7 +17,7 @@
 
 
 #include <Wire.h>
-
+#include <Arduino.h>
 #include "MLX90640_I2C_Driver.h"
 
 void MLX90640_I2CInit()
@@ -99,7 +99,7 @@ int MLX90640_I2CWrite(uint8_t _deviceAddress, unsigned int writeAddress, uint16_
   MLX90640_I2CRead(_deviceAddress, writeAddress, 1, &dataCheck);
   if (dataCheck != data)
   {
-    //Serial.println("The write request didn't stick");
+    // Serial.println("The write request didn't stick");
     return -2;
   }
 

@@ -62,15 +62,7 @@ byte page = 0;
 
 ESP8266WiFiMulti WiFiMulti;
 
-void setup()
-{
-	delay(1000);
-	Wire.begin(SDA_PIN, SCL_PIN);
-	Wire.setClock(400000);
-
-	Serial.begin(115200);
-	while (!Serial); //Wait for user to open terminal
-
+void setupMLX90640() {
 	if (isConnected() == false)
 	{
 		Serial.println("MLX90640 not detected at default I2C address. Please check wiring. Freezing.");
@@ -79,7 +71,9 @@ void setup()
 
 	//Get device parameters - We only have to do this once
 	int status;
+	int error = 1;
 	uint16_t eeMLX90640[832];
+	uint16_t controlRegister1;
 
 	status = MLX90640_DumpEE(MLX90640_address, eeMLX90640);
 	if (status != 0)
@@ -90,7 +84,28 @@ void setup()
 		Serial.println("Parameter extraction failed");
 
 	//Once params are extracted, we can release eeMLX90640 array
-	MLX90640_SetRefreshRate(MLX90640_address, 0x03); //Set rate to 8Hz
+	MLX90640_SetRefreshRate(MLX90640_address, 0x05); //Set rate to 16Hz
+	MLX90640_SetChessMode(MLX90640_address);
+	
+
+	error = MLX90640_I2CRead(MLX90640_address, 0x800D, 1, &controlRegister1);
+	if(error != 0)
+	{
+	    Serial.println("MLX90640 setup wasn't possible.");
+		while (1);
+	} 
+
+	controlRegister1 = (controlRegister1 | 0x0001);
+	controlRegister1 = (controlRegister1 & 0xFFFB);
+
+	error = MLX90640_I2CWrite(MLX90640_address, 0x800D, controlRegister1); 
+    if(error != 0)
+    {
+    	Serial.println("MLX90640 control register not possible to write");
+    } 
+}
+
+void setupWiFi() {
 
 	for (uint8_t t = 4; t > 0; t--) {
 		Serial.printf("[SETUP] WAIT %d...\n", t);
@@ -100,6 +115,23 @@ void setup()
 
 	WiFi.mode(WIFI_STA);
 	WiFiMulti.addAP("Muhaha", "woma2125");
+	
+}
+
+
+
+
+void setup()
+{
+	delay(1000);
+	Wire.begin(SDA_PIN, SCL_PIN);
+	Wire.setClock(400000);
+
+	Serial.begin(115200);
+	while (!Serial); //Wait for user to open terminal
+
+	setupMLX90640();
+	setupWiFi();
 	Wire.setClock(1000000);
 }
 
@@ -108,44 +140,55 @@ void loop()
 {
 	long startTime;
 	long stopTime;
-	startTime = millis();  
-	for (byte i = 0; i < 2; ++i){
-		uint16_t mlx90640Frame[835];
-		memset(mlx90640Frame, 0, sizeof(uint16_t) * 835);
-		int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame);
-		if (status < 0)
-		{
-			Serial.print("GetFrame Error: ");
-			Serial.println(status);
-		}
-	    
-		float vdd = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
-		float Ta = MLX90640_GetTa(mlx90640Frame, &mlx90640);
-		int mode = MLX90640_GetCurMode(MLX90640_address);
-	    float tr = Ta - TA_SHIFT; //Reflected temperature based on the sensor ambient temperature
-	    float emissivity = 0.95;
-		
-	    MLX90640_GetImage(mlx90640Frame, &mlx90640, mlx90640To);
-	    MLX90640_BadPixelsCorrection((&mlx90640)->brokenPixels, mlx90640To, mode, &mlx90640);
-	    MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
+	int mode;
+	startTime = millis(); 
+	memset(mlx90640To, 0, sizeof(float) * 768);
+	
+	uint16_t mlx90640Frame0[835];
+	uint16_t mlx90640Frame1[835];
+	memset(mlx90640Frame0, 0, sizeof(uint16_t) * 835);
+	memset(mlx90640Frame1, 0, sizeof(uint16_t) * 835);
+	delay(25);
+	int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame0);
+	if (status < 0)
+	{
+		Serial.print("GetFrame Error: ");
+		Serial.println(status);
 	}
+
+	MLX90640_GetImage(mlx90640Frame0, &mlx90640, mlx90640To);
+
+	delay(25);
+   	status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame1);
+	if (status < 0)
+	{
+		Serial.print("GetFrame Error: ");
+		Serial.println(status);
+	}
+    
+	MLX90640_GetImage(mlx90640Frame1, &mlx90640, mlx90640To);
+
+	mode = MLX90640_GetCurMode(MLX90640_address);
+
+    MLX90640_BadPixelsCorrection((&mlx90640)->brokenPixels, mlx90640To, mode, &mlx90640);
+    MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
+	
+	doSomethingWithResult(mlx90640To);
 	stopTime = millis();
 	
 	
 	Serial.print("Read rate: ");
 	Serial.print(stopTime - startTime);
 	Serial.println(" ms");
-
-    
-
-   	doSomethingWithResult(mlx90640To);
+	
+	
 }
 
 void doSomethingWithResult(float *mlx90640To) {
-	memset(textToSend, 0, sizeof(textToSend));
-    strcat(textToSend, "{\"text\":\"");
+	// memset(textToSend, 0, sizeof(textToSend));
+ //    strcat(textToSend, "{\"text\":\"");
 
-    char tmp[7];
+    // char tmp[7];
 	
     for (int x = 0 ; x < 768 ; x++){
     	char s[11];
@@ -164,6 +207,23 @@ void doSomethingWithResult(float *mlx90640To) {
  	// sendData(textToSend);
 }
 
+
+void connectArrays(uint16_t *frame1, uint16_t *frame2, int size) {
+	int i = frame2[833];
+	for (; i < size; i += 2)
+	{
+		frame1[i] = frame2[i];
+	}
+}
+
+void printArray(uint16_t *frame, int size) {
+	 for (int x = 0 ; x < size ; x++){
+    	
+    	Serial.print(frame[x]);
+    	Serial.print(",");
+    }
+    Serial.println("");
+}
 
 
 //Returns true if the MLX90640 is detected on the I2C bus

@@ -128,6 +128,8 @@ float findAvg(float *src, int size) {
 }
 
 void divideByAvg(float *src, int size, float avg, float *background, float *foreground, int *bckSize, int *foreSize) { 
+	*bckSize = 0;
+	*foreSize = 0;
 	for (int i = 0; i < size; ++i)
 	{
 		if (src[i] <= avg) {
@@ -140,13 +142,12 @@ void divideByAvg(float *src, int size, float avg, float *background, float *fore
 	}
 }
 
-float findThreshold(float *src, int size) {
+float findThreshold(float *src, int size, float minimumStep) {
 	float background[768];
 	float foreground[768];
 	int foreSize;
 	int bckSize;
 	float step = 1;
-	float minimumStep = 0.1;
 	float bckAvg;
 	float foreAvg;
 	float threshold = findAvg(src, size);
@@ -192,6 +193,42 @@ void detectPeople(float *src, int width, int height, struct Man *people, int *pe
 	}
 }
 
+int* calculateHistogram(float *src, int size, float *min, float *max) {
+	int *result = (int*)malloc(50 * sizeof(int));
+	memset(result, 0, 50 * sizeof(int));
+	*min = 99999999999;
+	*max = -99999999999;
+
+	for (int i = 0; i < size; ++i)
+	{
+		if (src[i] < *min) {
+			*min = src[i];
+		}
+		if (src[i] > *max) {
+			*max = src[i];
+		}
+	}
+	
+	float boundaries[50];
+	boundaries[0] = *min;
+	for (int i = 1; i < 50; ++i)
+	{
+		boundaries[i] = *min + (((*max - *min) / 50) * i);
+	}
+
+	for (int i = 0; i < size; ++i)
+	{
+		for (int j = 0; j < 50 - 1; ++j)
+		{
+			if (src[i] > boundaries[j] && src[i] <= boundaries[j + 1]) {
+				result[j]++;
+			}
+		}
+	}
+
+	return result; 
+}
+
 int main ( void )
 {
 	static const char filename[] = "dataset-2";
@@ -227,10 +264,14 @@ int main ( void )
 	float *numbers = (float* )malloc(768 * sizeof(float));
 	memset(numbers, 0, 768);
 
+	int *histogram;
+	
 	struct Man *people = malloc(4 * sizeof(struct Man));
 	int peopleSize = 0;
 
 	int lineNum = 0;
+	float min, max;
+
 	
 	while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
 	{
@@ -248,20 +289,25 @@ int main ( void )
 		{
 			numbers[i] = strtof(numberStrings[i], NULL);
 		}
-		// free(numberStrings);
-		// free(line);
+		
 		
 		// normalize(numbers, 768);
-		// printMatrix(normalizeFile, numbers, 32, 24);
-		// numbers = applyGaussian(numbers, 32, 24, gausian);
-		// float threshold = findThreshold(numbers, 768);
-		float threshold = findAvg(numbers, 768);
 		
-		// setThreshold(numbers, 768, threshold);
-		printMatrix(outputfile, numbers, 32, 24);
+		numbers = applyGaussian(numbers, 32, 24, gausian);
+		float threshold = findThreshold(numbers, 768, 2461000);
+		// float threshold = findAvg(numbers, 768);
+		
+		histogram = calculateHistogram(numbers, 768, &min, &max);
+		
+		if (max > 0) {
+			printMatrix(normalizeFile, numbers, 32, 24);
+			setThreshold(numbers, 768, threshold);
+			printMatrix(outputfile, numbers, 32, 24);
+			detectPeople(numbers, 32, 24, people, &peopleSize);
+			printf("People detected\n");
+		}
+		
 		printf("Image n. %d - Threshold: %f\n", lineNum++, threshold);
-
-		// detectPeople(numbers, 32, 24, people, &peopleSize);
 	}
 	fclose ( outputfile );
 	fclose ( normalizeFile );
