@@ -194,7 +194,7 @@ void detectPeople(float *src, int width, int height, struct Man *people, int *pe
 
 int main ( void )
 {
-	static const char filename[] = "dataset";
+	static const char filename[] = "dataset-2";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
