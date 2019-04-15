@@ -5,6 +5,14 @@
 
 #include <stdio.h>
 
+struct Man
+{
+    int x;
+    int y;
+    int width;
+    int height;
+};
+
 void normalize(float *src, int size) {
 	float min = 99999999999;
 	float max = -99999999999;
@@ -86,7 +94,8 @@ float getSourceGaussian(float *src, int width, int height, int widthOfImage, int
 	return source;
 }
 
-void applyGaussian(float *src, int widthOfImage, int heightOfImage, float *result, const float gausian[][5]) {
+float* applyGaussian(float *src, int widthOfImage, int heightOfImage, const float gausian[][5]) {
+	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(int));
 	int gausianDim = 5;
 	for (int i = 0; i < heightOfImage; ++i)
 	{
@@ -106,10 +115,11 @@ void applyGaussian(float *src, int widthOfImage, int heightOfImage, float *resul
 
 		}
 	}
+	return result;
 }
 
 float findAvg(float *src, int size) {
-	float sum = 0;
+	long double sum = 0;
 	for (int i = 0; i < size; ++i)
 	{
 		sum += src[i];
@@ -165,6 +175,23 @@ void setThreshold(float *src, int size, float threshold) {
 	}
 }
 
+void detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
+	int continuousY = 0;
+	int continuousX = 0;
+	for (int i = 0; i < height; ++i)
+	{
+		for (int j = 0; j < width; ++j)
+		{
+			if (src[i * width + j] == 1.0){
+				continuousY++;
+			}else {
+				continuousY = 0;
+			}
+		}
+
+	}
+}
+
 int main ( void )
 {
 	static const char filename[] = "dataset";
@@ -182,14 +209,14 @@ int main ( void )
 	}
 
 	static const char outputFilename[] = "output";
-	FILE *outputfile = fopen ( outputFilename, "a" );
+	FILE *outputfile = fopen ( outputFilename, "w+" );
 	if ( outputfile == NULL ) {
 		perror ( outputFilename ); /* why didn't the file open? */
 		return 0;
 	}
 
 	static const char normalizedFilename[] = "normalize-output";
-	FILE *normalizeFile = fopen ( normalizedFilename, "a" );
+	FILE *normalizeFile = fopen ( normalizedFilename, "w+" );
 	if ( normalizeFile == NULL ) {
 		perror ( normalizedFilename ); /* why didn't the file open? */
 		return 0;
@@ -197,9 +224,13 @@ int main ( void )
 
 	char line [ 12000 ]; /* or other suitable maximum line size */
 	
-	float numbers[768];
-	float afterGausian[768];
-	memset(afterGausian, 0, 768);
+	float *numbers = (float* )malloc(768 * sizeof(float));
+	memset(numbers, 0, 768);
+
+	struct Man *people = malloc(4 * sizeof(struct Man));
+	int peopleSize = 0;
+
+	int lineNum = 0;
 	
 	while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
 	{
@@ -220,14 +251,17 @@ int main ( void )
 		// free(numberStrings);
 		// free(line);
 		
-		normalize(numbers, 768);
-		printMatrix(normalizeFile, numbers, 32, 24);
-		applyGaussian(numbers, 32, 24, afterGausian, gausian);
-		float threshold = findThreshold(afterGausian, 768);
-		// float threshold = findAvg(afterGausian, 768);
+		// normalize(numbers, 768);
+		// printMatrix(normalizeFile, numbers, 32, 24);
+		// numbers = applyGaussian(numbers, 32, 24, gausian);
+		// float threshold = findThreshold(numbers, 768);
+		float threshold = findAvg(numbers, 768);
 		
-		setThreshold(afterGausian, 768, threshold);
-		printMatrix(outputfile, afterGausian, 32, 24);
+		// setThreshold(numbers, 768, threshold);
+		printMatrix(outputfile, numbers, 32, 24);
+		printf("Image n. %d - Threshold: %f\n", lineNum++, threshold);
+
+		// detectPeople(numbers, 32, 24, people, &peopleSize);
 	}
 	fclose ( outputfile );
 	fclose ( normalizeFile );
