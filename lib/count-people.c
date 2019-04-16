@@ -189,39 +189,112 @@ void setThreshold(float *src, int size, float threshold) {
 	}
 }
 
-void detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
-	int *tmp = (int*)malloc(width * height * 2 * sizeof(int));
-	int counter = 0;
-	for (int i = 0; i < height; ++i)
+int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *size) {
+	int x = id % width;
+	int y = id / width;
+	int *result = (int*) malloc(9 * sizeof(int));
+
+
+	
+	for (int j = -1; j <= 1; ++j)
 	{
-		for (int j = 0; j < width; ++j)
+		for (int i = -1; i <= 1; ++i)
 		{
-			if (src[i * width + j] == 1.0){
-				*(tmp + counter + 0) = i;
-				*(tmp + counter + 1) = j;
-				counter++;
+			if (x + i < 0 || x + i >= width || y + j < 0 || y + j >= height) {
+				continue;
+			}
+
+			int id = (y + j) * width + (x + i);
+			if (visited[id] == 0){
+				*(result + *(size)) = id;
+				*size = *size + 1;
 			}
 		}
 	}
-	// int beggingTop = tmp[0][0];
-	// int beggingLeft = tmp[0][1];
-	// int continuesY;
-	// int continuesX;
-	// int currentRow = tmp[0][0];
-	// for (int i = 1; i < counter; ++i)
-	// {
-	// 	if (currentRow != tmp[i][0] && tmp[i][0] == currentRow + 1) {
-	// 		currentRow == tmp[i][0];
-	// 		continuesX = 1;
-	// 	}
+	return result;
+}
 
-	// 	if (tmp[i-1][1] == tmp[i][1] - 1) {
-	// 		continuesY = 1;
-	// 	}
+int* getNeighbours(int id, int width, int height, int *size) {
+	int x = id % width;
+	int y = id / width;
+	int *result = (int*) malloc(9 * sizeof(int));
+	
+	for (int j = -1; j <= 1; ++j)
+	{
+		for (int i = -1; i <= 1; ++i)
+		{
+			if (x + i < 0 || x + i >= width || y + j < 0 || y + j >= height) {
+				continue;
+			}
 
+			int thisId = (y + j) * width + (x + i);
+			if (id != thisId){
+				*(result + *(size)) = thisId;
+				*size = *size + 1;
+			}
+		}
+	}
+	return result;
+}
 
+int* detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
+	float queue[768];
+	int numberOfItems = 1;
+	int queueCount = 1;
+	queue[0] = 0;
+	int front = 0;
+	int visited[768];
+	int objectNum[768];
+	memset(visited, 0, 768 * sizeof(int));
+	memset(objectNum, 0, 768 * sizeof(int));
+	visited[0] = 1;
 
-	// }
+	int *volume = (int*) malloc (768 * sizeof(int));
+	int counter = 1;
+
+	while (numberOfItems > 0) {
+		numberOfItems--;
+		int id = queue[front++];
+		
+		int size = 0;
+		int *neighbours = getUnvisitedNeighbours(id, width, height, visited, &size);
+		
+		for (int i = 0; i < size; ++i)
+		{
+			visited[neighbours[i]] = 1;
+			queue[queueCount] = neighbours[i];
+			queueCount++;
+			numberOfItems++;
+		}
+		size = 0;
+		neighbours = getNeighbours(id, width, height, &size);
+		int hasObjectNeighbour = 0;
+		int neighboursObjectNum = 0;
+		for (int i = 0; i < size; ++i)
+		{
+			float data = src[neighbours[i]];
+			if (data == 1 && objectNum[neighbours[i]] != 0) {
+				neighboursObjectNum = objectNum[neighbours[i]];
+			}
+		}
+
+		float data = src[id];
+		
+
+		if (data == 1) {
+			if (neighboursObjectNum != 0) {
+				objectNum[id] = neighboursObjectNum;
+			} else {
+				objectNum[id] = counter;
+			}
+			volume[objectNum[id]]++;
+		}
+
+		if (data == 0 && volume[counter] != 0) {
+			counter++;
+		}
+	}
+	return objectNum;
 }
 
 int* calculateHistogram(float *src, int size, float *min, float *max) {
@@ -351,8 +424,9 @@ int main ( void )
 			setThreshold(numbers, 768, threshold);
 
 
+			
+			numbers = detectPeople(numbers, 32, 24, people, &peopleSize);
 			printMatrix(outputfile, numbers, 32, 24);
-			detectPeople(numbers, 32, 24, people, &peopleSize);
 			printf("People detected\n");
 			printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
 		}
