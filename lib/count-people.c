@@ -39,7 +39,7 @@ void normalize(float *src, int size) {
 	
 }
 
-void printMatrix(FILE *file, float *src, int width, int height) {
+void printFloatMatrix(FILE *file, float *src, int width, int height) {
 	for (int i = 0; i < height; ++i)
 	{
 		for (int j = 0; j < width; ++j) 
@@ -51,6 +51,21 @@ void printMatrix(FILE *file, float *src, int width, int height) {
 	}
 	fprintf(file, "\n");
 }
+
+void printIntMatrix(FILE *file, int *src, int width, int height) {
+	for (int i = 0; i < height; ++i)
+	{
+		for (int j = 0; j < width; ++j) 
+		{
+			// printf("%04.5f, ", src[i * width + j]);
+			fprintf(file, "%d, ", src[i * width + j]);
+		}
+		// printf("\n");
+	}
+	fprintf(file, "\n");
+}
+
+
 
 //1 2 3
 //4   6
@@ -102,7 +117,7 @@ float getSourceGaussian(float *src, int width, int height, int widthOfImage, int
 }
 
 float* applyGaussian(float *src, int widthOfImage, int heightOfImage, const float gausian[][5]) {
-	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(int));
+	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(float));
 	int gausianDim = 5;
 	for (int i = 0; i < heightOfImage; ++i)
 	{
@@ -189,6 +204,19 @@ void setThreshold(float *src, int size, float threshold) {
 	}
 }
 
+int findMax(int *array, int size, int *returnIndex) {
+	int max = -99999;
+	for (int i = 0; i < size; ++i)
+	{
+		if (array[i] > max) {
+			max = array[i];
+			*(returnIndex) = i;
+		}
+	}
+	return max;
+}
+
+
 int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *size) {
 	int x = id % width;
 	int y = id / width;
@@ -237,6 +265,25 @@ int* getNeighbours(int id, int width, int height, int *size) {
 	return result;
 }
 
+void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y) {
+	int volume = 0;
+	for (int i = 0; i < height; ++i)
+	{
+		for (int j = 0; j < width; ++j)
+		{
+			if (src[i * width + j] == objectNum) {
+				*x = *x + i;
+				*y = *y + j;
+				volume++;
+			}
+		}
+
+	}
+
+	*x = *x / volume;
+	*y = *y / volume;
+}
+
 int* detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
 	float queue[768];
 	int numberOfItems = 1;
@@ -244,12 +291,14 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 	queue[0] = 0;
 	int front = 0;
 	int visited[768];
-	int objectNum[768];
+	int *objectNum = (int*) malloc (768 * sizeof(int));
+
 	memset(visited, 0, 768 * sizeof(int));
 	memset(objectNum, 0, 768 * sizeof(int));
 	visited[0] = 1;
 
 	int *volume = (int*) malloc (768 * sizeof(int));
+	memset(volume, 0, 768 * sizeof(int));
 	int counter = 1;
 
 	while (numberOfItems > 0) {
@@ -268,22 +317,29 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 		}
 		size = 0;
 		neighbours = getNeighbours(id, width, height, &size);
-		int hasObjectNeighbour = 0;
-		int neighboursObjectNum = 0;
+		
+		
+		
+		
+		int neighboursObjectNum[10];
+		memset(neighboursObjectNum, 0, 10 * sizeof(int));
+
 		for (int i = 0; i < size; ++i)
 		{
 			float data = src[neighbours[i]];
 			if (data == 1 && objectNum[neighbours[i]] != 0) {
-				neighboursObjectNum = objectNum[neighbours[i]];
+				neighboursObjectNum[objectNum[neighbours[i]]] = neighboursObjectNum[objectNum[neighbours[i]]] + 1;
 			}
 		}
 
 		float data = src[id];
 		
+		int index = 0;
+		findMax(neighboursObjectNum, 10, &index);
 
 		if (data == 1) {
-			if (neighboursObjectNum != 0) {
-				objectNum[id] = neighboursObjectNum;
+			if (neighboursObjectNum[index] != 0) {
+				objectNum[id] = index;
 			} else {
 				objectNum[id] = counter;
 			}
@@ -294,6 +350,20 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 			counter++;
 		}
 	}
+
+	// Starting from one because 0 is background
+	for (int i = 1; i < counter; ++i)
+	{
+		// 1 pixel is approx. 2.5 cm^2. So this is 125 cm^2.
+		if (volume[i] > 50) {
+			int x = 0, y = 0;
+			findCentroid(objectNum, width, height, i, &x, &y);
+			people[*peopleSize].x = x;
+			people[*peopleSize].y = y;
+			*peopleSize = *peopleSize + 1;
+		}
+	}
+
 	return objectNum;
 }
 
@@ -370,7 +440,7 @@ int main ( void )
 
 	int *histogram;
 	
-	struct Man *people = malloc(4 * sizeof(struct Man));
+	struct Man *people = malloc(10 * sizeof(struct Man));
 	int peopleSize = 0;
 
 	int lineNum = 0;
@@ -416,21 +486,27 @@ int main ( void )
 		
 		if (threshold > maxOfBackground) {
 			numbers = applyGaussian(numbers, 32, 24, gausian);
-			printMatrix(normalizeFile, numbers, 32, 24);
+			// printFloatMatrix(normalizeFile, numbers, 32, 24);
+
 
 			histogram = calculateHistogram(numbers, 768, &min, &max);
 			threshold = findThreshold(numbers, 768, (max - min) / 2);
 			
 			setThreshold(numbers, 768, threshold);
 
-
-			
-			numbers = detectPeople(numbers, 32, 24, people, &peopleSize);
-			printMatrix(outputfile, numbers, 32, 24);
-			printf("People detected\n");
+			int *detected = detectPeople(numbers, 32, 24, people, &peopleSize);
+			printIntMatrix(outputfile, detected, 32, 24);
 			printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
+			for (int i = 0; i < peopleSize; ++i)
+			{
+				printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
+			}
+			
 		}
 		
+		if (trainingCycles % 10) {
+			peopleSize = 0;
+		}
 		
 	}
 	fclose ( outputfile );
