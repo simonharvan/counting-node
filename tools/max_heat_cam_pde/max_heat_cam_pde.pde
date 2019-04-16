@@ -9,7 +9,7 @@ void setup() {
   //noStroke();
   
   colorMode(HSB, 360, 100, 100);
-  lines = loadStrings("/Users/simonharvan/Documents/Development/Arduino/counting-people/lib/long-dataset");
+  lines = loadStrings("/Users/simonharvan/Documents/Development/Arduino/counting-people/lib/output");
 }
 
 void draw() {

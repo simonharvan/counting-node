@@ -56,7 +56,7 @@ const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the 
 static float mlx90640To[768];
 paramsMLX90640 mlx90640;
 
-char textToSend[4800];
+char textToSend[15000];
 byte page = 0;
 //long counter = 0;
 
@@ -154,6 +154,7 @@ void loop()
 	{
 		Serial.print("GetFrame Error: ");
 		Serial.println(status);
+		return;
 	}
 
 	MLX90640_GetImage(mlx90640Frame0, &mlx90640, mlx90640To);
@@ -164,6 +165,7 @@ void loop()
 	{
 		Serial.print("GetFrame Error: ");
 		Serial.println(status);
+		return;
 	}
     
 	MLX90640_GetImage(mlx90640Frame1, &mlx90640, mlx90640To);
@@ -188,7 +190,7 @@ void doSomethingWithResult(float *mlx90640To) {
 	// memset(textToSend, 0, sizeof(textToSend));
  //    strcat(textToSend, "{\"text\":\"");
 
-    // char tmp[7];
+    char tmp[15];
 	
     for (int x = 0 ; x < 768 ; x++){
     	char s[11];

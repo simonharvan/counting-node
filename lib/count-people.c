@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 
+
 struct Man
 {
     int x;
@@ -12,6 +13,8 @@ struct Man
     int width;
     int height;
 };
+
+
 
 void normalize(float *src, int size) {
 	float min = 99999999999;
@@ -55,41 +58,45 @@ void printMatrix(FILE *file, float *src, int width, int height) {
 float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage) {
 	float source = src[height * widthOfImage + width];
 
+	// if (height < 0 || width < 0 || height >= heightOfImage || width >= widthOfImage) {
+	// 	return ;
+	// }
+
 	// 1
 	if (height < 0 && width < 0) {
-		// source = src[(heightOfImage + height) * widthOfImage + (widthOfImage + width)];
-		source = 0.5;
+		source = src[(heightOfImage + height) * widthOfImage + (widthOfImage + width)];
+		
 	// 2
 	} else if (height < 0 && width >= 0 && width < widthOfImage) {
-		// source = src[(heightOfImage + height) * widthOfImage + width];
-		source = 0.5;
+		source = src[(heightOfImage + height) * widthOfImage + width];
+		
  	// 3
 	} else if (height < 0 && width >= widthOfImage) {
-		// source = src[(heightOfImage + height) * widthOfImage + (width - widthOfImage)];
-		source = 0.5;
+		source = src[(heightOfImage + height) * widthOfImage + (width - widthOfImage)];
+		
 	// 4 
 	} else if (height >= 0 && height < heightOfImage && width < 0) {
-		// source = src[height * widthOfImage + (widthOfImage + width)];
-		source = 0.5;
+		source = src[height * widthOfImage + (widthOfImage + width)];
+		
 	// 6
 	} else if(height >= 0 && height < heightOfImage && width >= widthOfImage) {
-		// source = src[height * widthOfImage + (width - widthOfImage)];
-		source = 0.5;
+		source = src[height * widthOfImage + (width - widthOfImage)];
+		
 
 	// 7
 	} else if(height >= heightOfImage && width < 0) {
-		// source = src[(height - heightOfImage) * widthOfImage + (widthOfImage + width)];
-		source = 0.5;
+		source = src[(height - heightOfImage) * widthOfImage + (widthOfImage + width)];
+		
 	
 	// 8
 	} else if(height >= heightOfImage && width >= 0 && width < widthOfImage) {
-		// source = src[(height - heightOfImage) * widthOfImage + width];
-		source = 0.5;
+		source = src[(height - heightOfImage) * widthOfImage + width];
+		
 
 	// 9
 	} else if(height >= heightOfImage && width >= widthOfImage) {
-		// source = src[(height - heightOfImage) * widthOfImage + (width - widthOfImage)];
-		source = 0.5;
+		source = src[(height - heightOfImage) * widthOfImage + (width - widthOfImage)];
+		
 	}
 	return source;
 }
@@ -108,7 +115,7 @@ float* applyGaussian(float *src, int widthOfImage, int heightOfImage, const floa
                 	int width = w + j;
                 	
 					float source = getSourceGaussian(src, width, height, widthOfImage, heightOfImage);
-	               	result[i * widthOfImage + j] = gausian[h + 2][w + 2] * source;
+	               	result[i * widthOfImage + j] += gausian[h + 2][w + 2] * source;
 	               	
 				}
 			}
@@ -147,19 +154,25 @@ float findThreshold(float *src, int size, float minimumStep) {
 	float foreground[768];
 	int foreSize;
 	int bckSize;
-	float step = 1;
+	float step = 999999999999;
 	float bckAvg;
 	float foreAvg;
 	float threshold = findAvg(src, size);
 	float newThreshold;
+	
 	while (step > minimumStep){
 		foreSize = 0.0f;
 		bckSize = 0.0f;
 		divideByAvg(src, size, threshold, background, foreground, &bckSize, &foreSize);
 		bckAvg = findAvg(background, bckSize);
 		foreAvg = findAvg(foreground, foreSize);
-		newThreshold = foreAvg - bckAvg;
-		step = fabs(threshold - newThreshold);
+		newThreshold = (foreAvg + bckAvg) / 2;
+		if (threshold > newThreshold) {
+			step = fabs(threshold - newThreshold);
+		}else {
+			step = fabs(newThreshold - threshold);
+		}
+		
 		threshold = newThreshold;
 	}
 	return threshold;
@@ -177,20 +190,38 @@ void setThreshold(float *src, int size, float threshold) {
 }
 
 void detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
-	int continuousY = 0;
-	int continuousX = 0;
+	int *tmp = (int*)malloc(width * height * 2 * sizeof(int));
+	int counter = 0;
 	for (int i = 0; i < height; ++i)
 	{
 		for (int j = 0; j < width; ++j)
 		{
 			if (src[i * width + j] == 1.0){
-				continuousY++;
-			}else {
-				continuousY = 0;
+				*(tmp + counter + 0) = i;
+				*(tmp + counter + 1) = j;
+				counter++;
 			}
 		}
-
 	}
+	// int beggingTop = tmp[0][0];
+	// int beggingLeft = tmp[0][1];
+	// int continuesY;
+	// int continuesX;
+	// int currentRow = tmp[0][0];
+	// for (int i = 1; i < counter; ++i)
+	// {
+	// 	if (currentRow != tmp[i][0] && tmp[i][0] == currentRow + 1) {
+	// 		currentRow == tmp[i][0];
+	// 		continuesX = 1;
+	// 	}
+
+	// 	if (tmp[i-1][1] == tmp[i][1] - 1) {
+	// 		continuesY = 1;
+	// 	}
+
+
+
+	// }
 }
 
 int* calculateHistogram(float *src, int size, float *min, float *max) {
@@ -231,7 +262,7 @@ int* calculateHistogram(float *src, int size, float *min, float *max) {
 
 int main ( void )
 {
-	static const char filename[] = "dataset-2";
+	static const char filename[] = "dataset";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
@@ -271,10 +302,15 @@ int main ( void )
 
 	int lineNum = 0;
 	float min, max;
+	int AVG_TRAINING = 8;
+	int trainingCycles = 0;
 
+	float maxOfBackground = -99999999999;
 	
+
 	while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
 	{
+		trainingCycles++;
 		// for (int j = 0; j < 2; ++j)
 		fgets ( line, sizeof line, file );
 		char *numberStrings[768];
@@ -290,24 +326,38 @@ int main ( void )
 			numbers[i] = strtof(numberStrings[i], NULL);
 		}
 		
+
+		if (trainingCycles < AVG_TRAINING) {
+			float avg = findAvg(numbers, 768);
+			if (avg > maxOfBackground){
+				maxOfBackground = avg;
+			}
+			continue;
+		}
 		
 		// normalize(numbers, 768);
 		
-		numbers = applyGaussian(numbers, 32, 24, gausian);
-		float threshold = findThreshold(numbers, 768, 2461000);
-		// float threshold = findAvg(numbers, 768);
 		
-		histogram = calculateHistogram(numbers, 768, &min, &max);
+		// float avg = findAvg(numbers, 768);
+		float threshold = findAvg(numbers, 768);
 		
-		if (max > 0) {
+		if (threshold > maxOfBackground) {
+			numbers = applyGaussian(numbers, 32, 24, gausian);
 			printMatrix(normalizeFile, numbers, 32, 24);
+
+			histogram = calculateHistogram(numbers, 768, &min, &max);
+			threshold = findThreshold(numbers, 768, (max - min) / 2);
+			
 			setThreshold(numbers, 768, threshold);
+
+
 			printMatrix(outputfile, numbers, 32, 24);
 			detectPeople(numbers, 32, 24, people, &peopleSize);
 			printf("People detected\n");
+			printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
 		}
 		
-		printf("Image n. %d - Threshold: %f\n", lineNum++, threshold);
+		
 	}
 	fclose ( outputfile );
 	fclose ( normalizeFile );
