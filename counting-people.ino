@@ -38,7 +38,6 @@
 #include "MLX90640_API.h"
 #include "MLX90640_I2C_Driver.h"
 
-
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 
@@ -46,21 +45,34 @@
 
 #include <WiFiClient.h>
 
+#include "MLX_count_people.h"
+
 #define SDA_PIN 5 //is ok with 0 too
 #define SCL_PIN 4
 
 const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the MLX90640
 
+
 #define TA_SHIFT 8 //Default shift for MLX90640 in open air
 
+static int AVG_TRAINING = 50;
 static float mlx90640To[768];
+
 paramsMLX90640 mlx90640;
 
-char textToSend[15000];
-byte page = 0;
-//long counter = 0;
+// char textToSend[15000];
+int trainingCycles = 0;
+float maxOfBackground = -99999999999;
+float minValue = 0, maxValue = 0;
+
+struct Man people[10];
+int peopleSize = 0;
 
 ESP8266WiFiMulti WiFiMulti;
+
+void doSomethingWithResult(float *numbers);
+void sendData(char* text);
+boolean isConnected();
 
 void setupMLX90640() {
 	if (isConnected() == false)
@@ -112,13 +124,10 @@ void setupWiFi() {
 		Serial.flush();
 		delay(1000);
 	}
-
+	// WiFi.forceSleepBegin(0);
 	WiFi.mode(WIFI_STA);
 	WiFiMulti.addAP("Muhaha", "woma2125");
-	
 }
-
-
 
 
 void setup()
@@ -141,7 +150,7 @@ void loop()
 	long startTime;
 	long stopTime;
 	int mode;
-	startTime = millis(); 
+	startTime = millis();
 	memset(mlx90640To, 0, sizeof(float) * 768);
 	
 	uint16_t mlx90640Frame0[835];
@@ -175,10 +184,9 @@ void loop()
     MLX90640_BadPixelsCorrection((&mlx90640)->brokenPixels, mlx90640To, mode, &mlx90640);
     MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
 	
-	doSomethingWithResult(mlx90640To);
+	// doSomethingWithResult(mlx90640To);
 	stopTime = millis();
-	
-	
+
 	Serial.print("Read rate: ");
 	Serial.print(stopTime - startTime);
 	Serial.println(" ms");
@@ -186,47 +194,43 @@ void loop()
 	
 }
 
-void doSomethingWithResult(float *mlx90640To) {
-	// memset(textToSend, 0, sizeof(textToSend));
- //    strcat(textToSend, "{\"text\":\"");
+void doSomethingWithResult(float *numbers) {
 
-    char tmp[15];
-	
-    for (int x = 0 ; x < 768 ; x++){
-    	char s[11];
-    	Serial.print(dtostrf(mlx90640To[x], 10, 2, s));
-    	Serial.print(",");
-    	// memset(tmp, 0, sizeof(tmp));
-    	// ftoa(mlx90640To[x], tmp, 2);
-
-    	// strcat(tmp, ",");
-    	// strcat(textToSend, tmp);
-    }
-    // strcat(textToSend, "\"}");
-
-    Serial.println("");
-
- 	// sendData(textToSend);
-}
-
-
-void connectArrays(uint16_t *frame1, uint16_t *frame2, int size) {
-	int i = frame2[833];
-	for (; i < size; i += 2)
-	{
-		frame1[i] = frame2[i];
+	if (trainingCycles > AVG_TRAINING) {
+		float threshold = findAvg(numbers, 768);
+		// long startTime;
+		// long stopTime;
+		if (threshold > maxOfBackground) {
+			// startTime = millis();
+			ESP.wdtFeed();
+			numbers = applyGaussian(numbers, 32, 24);
+			ESP.wdtFeed();
+			findMinMax(numbers, 768, &minValue, &maxValue);
+			ESP.wdtFeed();
+			threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
+			ESP.wdtFeed();
+			setThreshold(numbers, 768, threshold);
+			ESP.wdtFeed();
+			detectPeople(numbers, 32, 24, people, &peopleSize);
+			// stopTime = millis();
+			Serial.print("Processing: ");
+			// Serial.print(stopTime - startTime);
+			// Serial.println(" ms");
+			for (int i = 0; i < peopleSize; ++i)
+			{
+				printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
+			}
+			peopleSize = 0;
+		}
+	}else {
+		float avg = findAvg(numbers, 768);
+		if (avg > maxOfBackground){
+			maxOfBackground = avg;
+		}
+		trainingCycles++;
+		return;
 	}
 }
-
-void printArray(uint16_t *frame, int size) {
-	 for (int x = 0 ; x < size ; x++){
-    	
-    	Serial.print(frame[x]);
-    	Serial.print(",");
-    }
-    Serial.println("");
-}
-
 
 //Returns true if the MLX90640 is detected on the I2C bus
 boolean isConnected() {
