@@ -327,7 +327,7 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 		for (int i = 0; i < size; ++i)
 		{
 			float data = src[neighbours[i]];
-			if (data == 1 && objectNum[neighbours[i]] != 0) {
+			if (data == 1 && objectNum[neighbours[i]] != 0 && objectNum[neighbours[i]] < 10) {
 				neighboursObjectNum[objectNum[neighbours[i]]] = neighboursObjectNum[objectNum[neighbours[i]]] + 1;
 			}
 		}

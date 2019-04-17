@@ -58,6 +58,9 @@ const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the 
 static int AVG_TRAINING = 10;
 static float mlx90640To[768];
 
+static uint16_t mlx90640Frame0[835];
+static uint16_t mlx90640Frame1[835];
+
 paramsMLX90640 mlx90640;
 
 // char textToSend[15000];
@@ -65,8 +68,8 @@ int trainingCycles = 0;
 float maxOfBackground = -99999999999;
 float minValue = 0, maxValue = 0;
 
-struct Man people[10];
-int peopleSize = 0;
+static Man people[10];
+static int peopleSize = 0;
 
 ESP8266WiFiMulti WiFiMulti;
 
@@ -144,21 +147,23 @@ void setup()
 	Wire.setClock(1000000);
 }
 
+int mode;
+int status;
+long startTime;
+long stopTime;
 
 void loop()
 {
-	long startTime;
-	long stopTime;
-	int mode;
+	
+		
+	Serial.println("Start");
+	
 	startTime = millis();
 	memset(mlx90640To, 0, sizeof(float) * 768);
 	
-	uint16_t mlx90640Frame0[835];
-	uint16_t mlx90640Frame1[835];
 	memset(mlx90640Frame0, 0, sizeof(uint16_t) * 835);
 	memset(mlx90640Frame1, 0, sizeof(uint16_t) * 835);
-	delay(25);
-	int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame0);
+	status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame0);
 	if (status < 0)
 	{
 		Serial.print("GetFrame Error: ");
@@ -167,8 +172,9 @@ void loop()
 	}
 
 	MLX90640_GetImage(mlx90640Frame0, &mlx90640, mlx90640To);
-
+	
 	delay(25);
+
    	status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame1);
 	if (status < 0)
 	{
@@ -178,58 +184,62 @@ void loop()
 	}
     
 	MLX90640_GetImage(mlx90640Frame1, &mlx90640, mlx90640To);
-
+	
 	mode = MLX90640_GetCurMode(MLX90640_address);
 
     MLX90640_BadPixelsCorrection((&mlx90640)->brokenPixels, mlx90640To, mode, &mlx90640);
     MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
 	
-	doSomethingWithResult(mlx90640To);
+	
 	stopTime = millis();
-
+	
 	Serial.print("Read rate: ");
 	Serial.print(stopTime - startTime);
 	Serial.println(" ms");
-	
-	
+
+	doSomethingWithResult();
+	Serial.println("End");
 }
 
-void doSomethingWithResult(float *numbers) {
+void doSomethingWithResult() {
 
 	if (trainingCycles > AVG_TRAINING) {
-		float threshold = findAvg(numbers, 768);
-		// long startTime;
-		// long stopTime;
+		float threshold = findAvg(mlx90640To, 768);
+		
 		if (threshold > maxOfBackground) {
 			// startTime = millis();
-			ESP.wdtFeed();
-			numbers = applyGaussian(numbers, 32, 24);
-			ESP.wdtFeed();
+			
+			float *numbers = applyGaussian(mlx90640To, 32, 24);
+			
 			findMinMax(numbers, 768, &minValue, &maxValue);
-			ESP.wdtFeed();
+			
 			threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
-			ESP.wdtFeed();
-			setThreshold(numbers, 768, threshold);
-			ESP.wdtFeed();
+			
+			numbers = setThreshold(numbers, 768, threshold);
+			
+			printArray(numbers, 768);
 			detectPeople(numbers, 32, 24, people, &peopleSize);
+			free(numbers);
 			// stopTime = millis();
-			Serial.print("Processing: ");
+			
 			// Serial.print(stopTime - startTime);
 			// Serial.println(" ms");
-			for (int i = 0; i < peopleSize; ++i)
-			{
+			for (int i = 0; i < peopleSize; ++i){
 				printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
 			}
 			peopleSize = 0;
+
 		}
 	}else {
-		float avg = findAvg(numbers, 768);
+		float avg = findAvg(mlx90640To, 768);
 		if (avg > maxOfBackground){
 			maxOfBackground = avg;
 		}
 		trainingCycles++;
 		return;
 	}
+	
+
 }
 
 //Returns true if the MLX90640 is detected on the I2C bus
@@ -240,6 +250,16 @@ boolean isConnected() {
     	return (false); //Sensor did not ACK
   	return (true);
 }
+
+void printArray(float *array, int size) {
+	 for (int x = 0 ; x < size ; x++){
+    	
+    	Serial.print(array[x]);
+    	Serial.print(",");
+    }
+    Serial.println("");
+}
+
 
 void sendData(char* text) {
 	if ((WiFiMulti.run() == WL_CONNECTED)) {

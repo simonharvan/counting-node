@@ -8,11 +8,11 @@
 float* applyGaussian(float *src, int widthOfImage, int heightOfImage);
 float findAvg(float *src, int size);
 float findThreshold(float *src, int size, float minimumStep);
-void setThreshold(float *src, int size, float threshold);
-void detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize);
+float* setThreshold(float *src, int size, float threshold);
+void detectPeople(float *src, int width, int height, Man people[], int *peopleSize);
 float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage);
 void divideByAvg(float *src, int size, float avg, float *background, float *foreground, int *bckSize, int *foreSize);
-int findMax(int *array, int size, int *returnIndex);
+void findMax(int *array, int size, int *returnIndex);
 int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *size);
 int* getNeighbours(int id, int width, int height, int *size);
 void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y);
@@ -83,21 +83,24 @@ void findMinMax(float *src, int size, float *min, float *max) {
 }
 
 float* applyGaussian(float *src, int widthOfImage, int heightOfImage) {
-	float result[768];
+	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(float));
 	int gausianDim = 5;
 	for (int i = 0; i < heightOfImage; ++i)
 	{
 		for (int j = 0; j < widthOfImage; ++j)
 		{
+			float sum = 0;
 			for (int h=-2; h < gausianDim - 2 ; h++) {
                 for (int w=-2; w < gausianDim - 2 ; w++) {
 					int height = h + i; 
                 	int width = w + j;
                 	
 					float source = getSourceGaussian(src, width, height, widthOfImage, heightOfImage);
-	               	result[i * widthOfImage + j] += gausian[h + 2][w + 2] * source;
+	               	sum += gausian[h + 2][w + 2] * source;
 				}
+
 			}
+			result[i * widthOfImage + j] = sum;
 
 		}
 	}
@@ -157,7 +160,7 @@ float findThreshold(float *src, int size, float minimumStep) {
 	return threshold;
 }
 
-void setThreshold(float *src, int size, float threshold) {
+float* setThreshold(float *src, int size, float threshold) {
 	for (int i = 0; i < size; ++i)
 	{
 		if (src[i] <= threshold) {
@@ -166,9 +169,10 @@ void setThreshold(float *src, int size, float threshold) {
 			src[i] = 1;
 		}
 	}
+	return src;
 }
 
-int findMax(int *array, int size, int *returnIndex) {
+void findMax(int *array, int size, int *returnIndex) {
 	int max = -99999;
 	for (int i = 0; i < size; ++i)
 	{
@@ -177,14 +181,13 @@ int findMax(int *array, int size, int *returnIndex) {
 			*(returnIndex) = i;
 		}
 	}
-	return max;
 }
 
 
 int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *size) {
 	int x = id % width;
 	int y = id / width;
-	int result[9];
+	int *result = (int*) malloc (9 * sizeof(int));
 	memset(result, 0, 9 * sizeof(int));
 
 	
@@ -210,7 +213,8 @@ int* getNeighbours(int id, int width, int height, int *size) {
 	int x = id % width;
 	int y = id / width;
 	int *result = (int*) malloc(9 * sizeof(int));
-	
+	memset(result, 0, 9 * sizeof(int));
+
 	for (int j = -1; j <= 1; ++j)
 	{
 		for (int i = -1; i <= 1; ++i)
@@ -230,7 +234,9 @@ int* getNeighbours(int id, int width, int height, int *size) {
 }
 
 void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y) {
-	int volume = 0;
+	int volumeVal = 0;
+	*x = 0;
+	*y = 0;
 	for (int i = 0; i < height; ++i)
 	{
 		for (int j = 0; j < width; ++j)
@@ -238,35 +244,39 @@ void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y
 			if (src[i * width + j] == objectNum) {
 				*x = *x + i;
 				*y = *y + j;
-				volume++;
+				volumeVal++;
 			}
 		}
 
 	}
 
-	*x = *x / volume;
-	*y = *y / volume;
+	*x = *x / volumeVal;
+	*y = *y / volumeVal;
 }
 
-void detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
-	int queue[768];
-	int numberOfItems = 1;
-	int queueCount = 1;
+int queue[768];
+int visited[768];
+int objectNum[768];
+int volume[768];
+int front;
+int queueCount;
+int numberOfItems;
+int counter;
+
+void detectPeople(float *src, int width, int height, Man *people, int *peopleSize) {
+	
+	numberOfItems = 1;
+	queueCount = 1;
 	queue[0] = 0;
-	int front = 0;
-	int visited[768];
-	int objectNum[768];
+	front = 0;
 
 	memset(visited, 0, 768 * sizeof(int));
 	memset(objectNum, 0, 768 * sizeof(int));
-	visited[0] = 1;
-
-	int volume[768];
 	memset(volume, 0, 768 * sizeof(int));
-	int counter = 1;
+	visited[0] = 1;
+	counter = 1;
 
 	while (numberOfItems > 0) {
-		ESP.wdtFeed();
 		numberOfItems--;
 		int id = queue[front++];
 		
@@ -281,10 +291,8 @@ void detectPeople(float *src, int width, int height, struct Man *people, int *pe
 			numberOfItems++;
 		}
 		size = 0;
+		free(neighbours);
 		neighbours = getNeighbours(id, width, height, &size);
-		
-		
-		
 		
 		int neighboursObjectNum[10];
 		memset(neighboursObjectNum, 0, 10 * sizeof(int));
@@ -292,10 +300,12 @@ void detectPeople(float *src, int width, int height, struct Man *people, int *pe
 		for (int i = 0; i < size; ++i)
 		{
 			float data = src[neighbours[i]];
-			if (data == 1 && objectNum[neighbours[i]] != 0) {
+			if (data == 1 && objectNum[neighbours[i]] != 0 && objectNum[neighbours[i]] < 10) {
 				neighboursObjectNum[objectNum[neighbours[i]]] = neighboursObjectNum[objectNum[neighbours[i]]] + 1;
 			}
 		}
+
+		free(neighbours);
 
 		float data = src[id];
 		
@@ -316,12 +326,12 @@ void detectPeople(float *src, int width, int height, struct Man *people, int *pe
 		}
 	}
 
+	int x, y;
 	// Starting from one because 0 is background
 	for (int i = 1; i < counter; ++i)
 	{
 		// 1 pixel is approx. 2.5 cm^2. So this is 125 cm^2.
 		if (volume[i] > 50) {
-			int x = 0, y = 0;
 			findCentroid(objectNum, width, height, i, &x, &y);
 			people[*peopleSize].x = x;
 			people[*peopleSize].y = y;
@@ -329,3 +339,5 @@ void detectPeople(float *src, int width, int height, struct Man *people, int *pe
 		}
 	}
 }
+
+
