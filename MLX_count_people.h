@@ -23,6 +23,7 @@
    float findThreshold(float *src, int size, float minimumStep);
    void findMinMax(float *src, int size, float *min, float *max);
    float* setThreshold(float *src, int size, float threshold);
-   void detectPeople(float *src, int width, int height, Man people[], int *peopleSize);
+   float getStdDev(float *src, int size);
+   int* detectPeople(float *src, int width, int height, Man people[], int *peopleSize);
 
 #endif

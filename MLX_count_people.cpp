@@ -9,7 +9,7 @@ float* applyGaussian(float *src, int widthOfImage, int heightOfImage);
 float findAvg(float *src, int size);
 float findThreshold(float *src, int size, float minimumStep);
 float* setThreshold(float *src, int size, float threshold);
-void detectPeople(float *src, int width, int height, Man people[], int *peopleSize);
+int* detectPeople(float *src, int width, int height, Man people[], int *peopleSize);
 float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage);
 void divideByAvg(float *src, int size, float avg, float *background, float *foreground, int *bckSize, int *foreSize);
 void findMax(int *array, int size, int *returnIndex);
@@ -17,6 +17,7 @@ int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *si
 int* getNeighbours(int id, int width, int height, int *size);
 void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y);
 void findMinMax(float *src, int size, float *min, float *max);
+float getStdDev(float *src, int size);
 
 //1 2 3
 //4   6
@@ -263,7 +264,7 @@ int queueCount;
 int numberOfItems;
 int counter;
 
-void detectPeople(float *src, int width, int height, Man *people, int *peopleSize) {
+int* detectPeople(float *src, int width, int height, Man *people, int *peopleSize) {
 	
 	numberOfItems = 1;
 	queueCount = 1;
@@ -338,6 +339,21 @@ void detectPeople(float *src, int width, int height, Man *people, int *peopleSiz
 			*peopleSize = *peopleSize + 1;
 		}
 	}
+	return objectNum;
 }
+
+float getStdDev(float *src, int size) {
+	float avg = findAvg(src, size); 
+
+	float standardDeviation = 0.0;
+
+	for (int i = 0; i < size; ++i)
+	{
+		standardDeviation += pow(src[i] - avg, 2);
+	}
+	
+	return sqrt(standardDeviation/size);
+}
+
 
 

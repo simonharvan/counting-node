@@ -405,7 +405,7 @@ int* calculateHistogram(float *src, int size, float *min, float *max) {
 
 int main ( void )
 {
-	static const char filename[] = "dataset";
+	static const char filename[] = "with";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
@@ -470,13 +470,13 @@ int main ( void )
 		}
 		
 
-		if (trainingCycles < AVG_TRAINING) {
-			float avg = findAvg(numbers, 768);
-			if (avg > maxOfBackground){
-				maxOfBackground = avg;
-			}
-			continue;
-		}
+		// if (trainingCycles < AVG_TRAINING) {
+		// 	float avg = findAvg(numbers, 768);
+		// 	if (avg > maxOfBackground){
+		// 		maxOfBackground = avg;
+		// 	}
+		// 	continue;
+		// }
 		
 		// normalize(numbers, 768);
 		
@@ -484,29 +484,29 @@ int main ( void )
 		// float avg = findAvg(numbers, 768);
 		float threshold = findAvg(numbers, 768);
 		
-		if (threshold > maxOfBackground) {
+		// if (threshold > maxOfBackground) {
 			numbers = applyGaussian(numbers, 32, 24, gausian);
-			// printFloatMatrix(normalizeFile, numbers, 32, 24);
+			printFloatMatrix(normalizeFile, numbers, 32, 24);
 
 
-			histogram = calculateHistogram(numbers, 768, &min, &max);
-			threshold = findThreshold(numbers, 768, (max - min) / 2);
+			// histogram = calculateHistogram(numbers, 768, &min, &max);
+			// threshold = findThreshold(numbers, 768, (max - min) / 2);
 			
-			setThreshold(numbers, 768, threshold);
+			// setThreshold(numbers, 768, threshold);
 
-			int *detected = detectPeople(numbers, 32, 24, people, &peopleSize);
-			printIntMatrix(outputfile, detected, 32, 24);
-			printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
-			for (int i = 0; i < peopleSize; ++i)
-			{
-				printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
-			}
+			// int *detected = detectPeople(numbers, 32, 24, people, &peopleSize);
+			// printIntMatrix(outputfile, detected, 32, 24);
+			// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
+			// for (int i = 0; i < peopleSize; ++i)
+			// {
+			// 	printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
+			// }
 			
-		}
+		// }
 		
-		if (trainingCycles % 10) {
-			peopleSize = 0;
-		}
+		// if (trainingCycles % 10) {
+		// 	peopleSize = 0;
+		// }
 		
 	}
 	fclose ( outputfile );

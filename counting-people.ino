@@ -55,7 +55,7 @@ const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the 
 
 #define TA_SHIFT 8 //Default shift for MLX90640 in open air
 
-static int AVG_TRAINING = 10;
+static int AVG_TRAINING = 250;
 static float mlx90640To[768];
 
 static uint16_t mlx90640Frame0[835];
@@ -155,10 +155,7 @@ long stopTime;
 void loop()
 {
 	
-		
-	Serial.println("Start");
-	
-	startTime = millis();
+	// startTime = millis();
 	memset(mlx90640To, 0, sizeof(float) * 768);
 	
 	memset(mlx90640Frame0, 0, sizeof(uint16_t) * 835);
@@ -191,35 +188,36 @@ void loop()
     MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
 	
 	
-	stopTime = millis();
+	// stopTime = millis();
 	
-	Serial.print("Read rate: ");
-	Serial.print(stopTime - startTime);
-	Serial.println(" ms");
+	// Serial.print("Read rate: ");
+	// Serial.print(stopTime - startTime);
+	// Serial.println(" ms");
 
 	doSomethingWithResult();
-	Serial.println("End");
 }
 
 void doSomethingWithResult() {
-
+	float *numbers;
 	if (trainingCycles > AVG_TRAINING) {
-		float threshold = findAvg(mlx90640To, 768);
+		numbers = applyGaussian(mlx90640To, 32, 24);
+		float stdDev = getStdDev(numbers, 768);
 		
-		if (threshold > maxOfBackground) {
-			// startTime = millis();
+		if (stdDev > maxOfBackground) {
+			startTime = millis();
 			
-			float *numbers = applyGaussian(mlx90640To, 32, 24);
 			
 			findMinMax(numbers, 768, &minValue, &maxValue);
 			
-			threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
+			float threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
 			
 			numbers = setThreshold(numbers, 768, threshold);
 			
-			printArray(numbers, 768);
-			detectPeople(numbers, 32, 24, people, &peopleSize);
-			free(numbers);
+
+			int* objects = detectPeople(numbers, 32, 24, people, &peopleSize);
+			
+			printIntArray(objects, 768);
+			
 			// stopTime = millis();
 			
 			// Serial.print(stopTime - startTime);
@@ -231,14 +229,15 @@ void doSomethingWithResult() {
 
 		}
 	}else {
-		float avg = findAvg(mlx90640To, 768);
-		if (avg > maxOfBackground){
-			maxOfBackground = avg;
+		numbers = applyGaussian(mlx90640To, 32, 24);
+		float stdDev = getStdDev(numbers, 768);
+		
+		if (stdDev > maxOfBackground){
+			maxOfBackground = stdDev;
 		}
 		trainingCycles++;
-		return;
 	}
-	
+	free(numbers);
 
 }
 
@@ -260,6 +259,14 @@ void printArray(float *array, int size) {
     Serial.println("");
 }
 
+void printIntArray(int *array, int size) {
+	 for (int x = 0 ; x < size ; x++){
+    	
+    	Serial.print(array[x]);
+    	Serial.print(",");
+    }
+    Serial.println("");
+}
 
 void sendData(char* text) {
 	if ((WiFiMulti.run() == WL_CONNECTED)) {
