@@ -55,7 +55,7 @@ const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the 
 
 #define TA_SHIFT 8 //Default shift for MLX90640 in open air
 
-static int AVG_TRAINING = 50;
+static int AVG_TRAINING = 10;
 static float mlx90640To[768];
 
 paramsMLX90640 mlx90640;
@@ -184,7 +184,7 @@ void loop()
     MLX90640_BadPixelsCorrection((&mlx90640)->brokenPixels, mlx90640To, mode, &mlx90640);
     MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
 	
-	// doSomethingWithResult(mlx90640To);
+	doSomethingWithResult(mlx90640To);
 	stopTime = millis();
 
 	Serial.print("Read rate: ");
