@@ -433,7 +433,7 @@ int main ( void )
 		return 0;
 	}
 
-	char line [ 12000 ]; /* or other suitable maximum line size */
+	// char line [ 12000 ]; /* or other suitable maximum line size */
 	
 	float *numbers = (float* )malloc(768 * sizeof(float));
 	memset(numbers, 0, 768);
@@ -449,13 +449,14 @@ int main ( void )
 	int trainingCycles = 0;
 
 	float maxOfBackground = -99999999999;
-	
+	ssize_t read;
+	char *line = NULL;
+	size_t len = 0;
 
-	while ( fgets ( line, sizeof line, file ) != NULL ) /* read a line */
-	{
+	while ((read = getline(&line, &len, file)) != -1) {
 		trainingCycles++;
-		// for (int j = 0; j < 2; ++j)
-		fgets ( line, sizeof line, file );
+		
+		
 		char *numberStrings[768];
 		memset(numberStrings, 0, 768);
 		int i = 0;
