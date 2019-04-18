@@ -6,6 +6,9 @@
 #include <stdio.h>
 
 
+#define TRUE 1
+#define FALSE 0
+
 struct Man
 {
     int x;
@@ -13,6 +16,127 @@ struct Man
     int width;
     int height;
 };
+
+typedef struct node{
+
+	int data;
+	struct node* previous;
+
+}*node_ptr;
+
+
+node_ptr front = NULL;
+node_ptr rear = NULL;
+
+int isEmpty(){
+
+	if (front == NULL)
+		return TRUE;
+	return FALSE;
+}
+
+int skipTheQueue(int value) {
+	node_ptr item = (node_ptr) malloc(sizeof(struct node));
+
+	if (item == NULL)
+		return FALSE;
+	
+	if(rear == NULL) {
+		item->data = value;
+		item->previous = NULL;
+		front = rear = item;
+	}else {
+		item->data = value;
+		item->previous = front;
+		front = item;
+	}
+	return TRUE;
+}
+
+int enqueue(int value){
+
+	node_ptr item = (node_ptr) malloc(sizeof(struct node));
+
+	if (item == NULL)
+		return FALSE;
+
+	item->data = value;
+	item->previous = NULL;
+
+	if(rear == NULL)
+		front = rear = item;
+	else{
+		rear->previous = item;
+		rear = item;
+	}
+
+	return TRUE;
+}
+
+int dequeue(){
+
+	if(isEmpty()){
+
+		printf("\nThe queue is empty!\n");
+		return FALSE;
+	}
+	
+	int value = front->data;
+
+	node_ptr temp = front;
+	if (rear == front) {
+		rear = front->previous;
+	}
+	front = front->previous;
+
+	free(temp);
+
+	return value;
+}
+void display(){
+
+
+	if(isEmpty()){
+
+		printf("\nThe queue is empty!\n");
+		return;
+	}
+
+	node_ptr temp = front;
+
+	printf("\n[front -> ");
+
+	while(temp != NULL){
+		printf("[%d]", temp->data);
+		temp = temp->previous;
+	}
+
+	printf(" <- rear]\n");
+
+}
+
+int clear(){
+
+	if(isEmpty()){
+
+		printf("\nThe queue is empty!\n");
+		return FALSE;
+	}
+
+	node_ptr current = front;
+	node_ptr previous = NULL;
+
+	while(current != NULL){
+
+		previous = current->previous;
+		free(current);
+		current = previous;
+	}
+
+	front = NULL;
+
+	return isEmpty();
+}
 
 
 
@@ -224,9 +348,9 @@ int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *si
 
 
 	
-	for (int j = -1; j <= 1; ++j)
+	for (int i = -1; i <= 1; ++i)
 	{
-		for (int i = -1; i <= 1; ++i)
+		for (int j = -1; j <= 1; ++j)
 		{
 			if (x + i < 0 || x + i >= width || y + j < 0 || y + j >= height) {
 				continue;
@@ -285,11 +409,9 @@ void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y
 }
 
 int* detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
-	float queue[768];
-	int numberOfItems = 1;
-	int queueCount = 1;
-	queue[0] = 0;
-	int front = 0;
+	
+	enqueue(0);
+
 	int visited[768];
 	int *objectNum = (int*) malloc (768 * sizeof(int));
 
@@ -300,26 +422,25 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 	int *volume = (int*) malloc (768 * sizeof(int));
 	memset(volume, 0, 768 * sizeof(int));
 	int counter = 1;
-
-	while (numberOfItems > 0) {
-		numberOfItems--;
-		int id = queue[front++];
-		
+	int c = 0;
+	while (!isEmpty()) {
+		c++;
+		display();
+		int id = dequeue();
 		int size = 0;
 		int *neighbours = getUnvisitedNeighbours(id, width, height, visited, &size);
 		
 		for (int i = 0; i < size; ++i)
 		{
 			visited[neighbours[i]] = 1;
-			queue[queueCount] = neighbours[i];
-			queueCount++;
-			numberOfItems++;
+			if (src[neighbours[i]] == 1) {
+				skipTheQueue(neighbours[i]);
+			}else {
+				enqueue(neighbours[i]);
+			}
 		}
 		size = 0;
 		neighbours = getNeighbours(id, width, height, &size);
-		
-		
-		
 		
 		int neighboursObjectNum[10];
 		memset(neighboursObjectNum, 0, 10 * sizeof(int));
@@ -350,6 +471,8 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 			counter++;
 		}
 	}
+	clear();
+	printf("%d\n", c);
 
 	// Starting from one because 0 is background
 	for (int i = 1; i < counter; ++i)
@@ -403,9 +526,11 @@ int* calculateHistogram(float *src, int size, float *min, float *max) {
 	return result; 
 }
 
+
+
 int main ( void )
 {
-	static const char filename[] = "with";
+	static const char filename[] = "tmp-3";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
@@ -483,20 +608,20 @@ int main ( void )
 		
 		
 		// float avg = findAvg(numbers, 768);
-		float threshold = findAvg(numbers, 768);
+		// float threshold = findAvg(numbers, 768);
 		
 		// if (threshold > maxOfBackground) {
-			numbers = applyGaussian(numbers, 32, 24, gausian);
-			printFloatMatrix(normalizeFile, numbers, 32, 24);
+		// 	numbers = applyGaussian(numbers, 32, 24, gausian);
+		// 	printFloatMatrix(normalizeFile, numbers, 32, 24);
 
 
-			// histogram = calculateHistogram(numbers, 768, &min, &max);
-			// threshold = findThreshold(numbers, 768, (max - min) / 2);
+		// 	histogram = calculateHistogram(numbers, 768, &min, &max);
+		// 	threshold = findThreshold(numbers, 768, (max - min) / 2);
 			
-			// setThreshold(numbers, 768, threshold);
+		// 	setThreshold(numbers, 768, threshold);
 
-			// int *detected = detectPeople(numbers, 32, 24, people, &peopleSize);
-			// printIntMatrix(outputfile, detected, 32, 24);
+			int *detected = detectPeople(numbers, 32, 24, people, &peopleSize);
+			printIntMatrix(outputfile, detected, 32, 24);
 			// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
 			// for (int i = 0; i < peopleSize; ++i)
 			// {

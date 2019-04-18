@@ -55,7 +55,10 @@ const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the 
 
 #define TA_SHIFT 8 //Default shift for MLX90640 in open air
 
+#define STDEVS_ARRAY 255;
+
 static int AVG_TRAINING = 250;
+
 static float mlx90640To[768];
 
 static uint16_t mlx90640Frame0[835];
@@ -135,7 +138,7 @@ void setupWiFi() {
 
 void setup()
 {
-	delay(1000);
+	delay(4000);
 	Wire.begin(SDA_PIN, SCL_PIN);
 	Wire.setClock(400000);
 
@@ -151,11 +154,13 @@ int mode;
 int status;
 long startTime;
 long stopTime;
+// float stdevs[AVG_TRAINING];
+// long stdevsCounter = 0;
 
 void loop()
 {
 	
-	// startTime = millis();
+	startTime = millis();
 	memset(mlx90640To, 0, sizeof(float) * 768);
 	
 	memset(mlx90640Frame0, 0, sizeof(uint16_t) * 835);
@@ -188,24 +193,22 @@ void loop()
     MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
 	
 	
-	// stopTime = millis();
+	stopTime = millis();
 	
-	// Serial.print("Read rate: ");
-	// Serial.print(stopTime - startTime);
-	// Serial.println(" ms");
+	Serial.print("Read rate: ");
+	Serial.print(stopTime - startTime);
+	Serial.println(" ms");
 
 	doSomethingWithResult();
 }
 
 void doSomethingWithResult() {
 	float *numbers;
+	startTime = millis();
 	if (trainingCycles > AVG_TRAINING) {
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		float stdDev = getStdDev(numbers, 768);
-		
 		if (stdDev > maxOfBackground) {
-			startTime = millis();
-			
 			
 			findMinMax(numbers, 768, &minValue, &maxValue);
 			
@@ -213,30 +216,37 @@ void doSomethingWithResult() {
 			
 			numbers = setThreshold(numbers, 768, threshold);
 			
-
 			int* objects = detectPeople(numbers, 32, 24, people, &peopleSize);
 			
 			printIntArray(objects, 768);
 			
-			// stopTime = millis();
+			stopTime = millis();
 			
-			// Serial.print(stopTime - startTime);
-			// Serial.println(" ms");
 			for (int i = 0; i < peopleSize; ++i){
 				printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
 			}
 			peopleSize = 0;
-
 		}
 	}else {
+		trainingCycles++;
+		if (trainingCycles < 5) {
+			return;
+		}
+		
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		float stdDev = getStdDev(numbers, 768);
-		
+		// if (stdevsCounter >= 3) {
+			// stdevs[stdevsCounter++] = stdDev;
+			// // stdDev = (stdevs[stdevsCounter - 2] + stdevs[stdevsCounter - 1] + stdevs[stdevsCounter]) / 3;
+		Serial.println(stdDev);
 		if (stdDev > maxOfBackground){
 			maxOfBackground = stdDev;
 		}
-		trainingCycles++;
 	}
+	stopTime = millis();
+	Serial.print("Process rate: ");
+	Serial.print(stopTime - startTime);
+	Serial.println(" ms");
 	free(numbers);
 
 }

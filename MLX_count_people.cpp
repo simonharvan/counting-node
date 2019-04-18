@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <Arduino.h>
 
+#define TRUE 1
+#define FALSE 0
 
 float* applyGaussian(float *src, int widthOfImage, int heightOfImage);
 float findAvg(float *src, int size);
@@ -18,6 +20,96 @@ int* getNeighbours(int id, int width, int height, int *size);
 void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y);
 void findMinMax(float *src, int size, float *min, float *max);
 float getStdDev(float *src, int size);
+
+
+typedef struct node{
+
+	int data;
+	struct node* previous;
+
+}*node_ptr;
+
+
+node_ptr front = NULL;
+node_ptr rear = NULL;
+
+int isEmpty(){
+
+	if (front == NULL)
+		return TRUE;
+	return FALSE;
+}
+
+void skipTheQueue(int value) {
+	node_ptr item = (node_ptr) malloc(sizeof(struct node));
+
+	if (item == NULL)
+		return;
+
+	if(rear == NULL) {
+		item->data = value;
+		item->previous = NULL;
+		front = rear = item;
+	}else {
+		item->data = value;
+		item->previous = front;
+		front = item;
+	}
+}
+
+void enqueue(int value){
+
+	node_ptr item = (node_ptr) malloc(sizeof(struct node));
+
+	if (item == NULL)
+		return;
+
+	item->data = value;
+	item->previous = NULL;
+
+	if(rear == NULL)
+		front = rear = item;
+	else{
+		rear->previous = item;
+		rear = item;
+	}
+}
+
+int dequeue(){
+
+	int value = front->data;
+
+	node_ptr temp = front;
+	if (rear == front) {
+		rear = front->previous;
+	}
+	front = front->previous;
+
+	free(temp);
+
+	return value;
+}
+
+void clear(){
+
+	if(isEmpty()){
+		return;
+	}
+
+	node_ptr current = front;
+	node_ptr previous = NULL;
+
+	while(current != NULL){
+
+		previous = current->previous;
+		free(current);
+		current = previous;
+	}
+
+	front = NULL;
+	rear = NULL;
+}
+
 
 //1 2 3
 //4   6
@@ -255,21 +347,14 @@ void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y
 	*y = *y / volumeVal;
 }
 
-int queue[768];
 int visited[768];
 int objectNum[768];
 int volume[768];
-int front;
-int queueCount;
-int numberOfItems;
 int counter;
 
 int* detectPeople(float *src, int width, int height, Man *people, int *peopleSize) {
 	
-	numberOfItems = 1;
-	queueCount = 1;
-	queue[0] = 0;
-	front = 0;
+	enqueue(0);
 
 	memset(visited, 0, 768 * sizeof(int));
 	memset(objectNum, 0, 768 * sizeof(int));
@@ -277,9 +362,8 @@ int* detectPeople(float *src, int width, int height, Man *people, int *peopleSiz
 	visited[0] = 1;
 	counter = 1;
 
-	while (numberOfItems > 0) {
-		numberOfItems--;
-		int id = queue[front++];
+	while (isEmpty()) {
+		int id = dequeue();
 		
 		int size = 0;
 		int *neighbours = getUnvisitedNeighbours(id, width, height, visited, &size);
@@ -287,12 +371,17 @@ int* detectPeople(float *src, int width, int height, Man *people, int *peopleSiz
 		for (int i = 0; i < size; ++i)
 		{
 			visited[neighbours[i]] = 1;
-			queue[queueCount] = neighbours[i];
-			queueCount++;
-			numberOfItems++;
+			if (src[neighbours[i]] == 1) {
+				skipTheQueue(neighbours[i]);
+			}else {
+				enqueue(neighbours[i]);
+			}
 		}
+
 		size = 0;
+		
 		free(neighbours);
+		
 		neighbours = getNeighbours(id, width, height, &size);
 		
 		int neighboursObjectNum[10];
@@ -326,7 +415,10 @@ int* detectPeople(float *src, int width, int height, Man *people, int *peopleSiz
 			counter++;
 		}
 	}
-
+	
+	clear();
+	
+	
 	int x, y;
 	// Starting from one because 0 is background
 	for (int i = 1; i < counter; ++i)
@@ -354,6 +446,8 @@ float getStdDev(float *src, int size) {
 	
 	return sqrt(standardDeviation/size);
 }
+
+
 
 
 

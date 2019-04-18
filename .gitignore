@@ -51,4 +51,5 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-tools/*.png
+tools/max_heat_cam_pde/*.png
+
