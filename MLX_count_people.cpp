@@ -35,16 +35,19 @@ node_ptr rear = NULL;
 
 int isEmpty(){
 
-	if (front == NULL)
+	if (front == NULL){
 		return TRUE;
+	}
 	return FALSE;
 }
 
 void skipTheQueue(int value) {
 	node_ptr item = (node_ptr) malloc(sizeof(struct node));
 
-	if (item == NULL)
+	if (item == NULL){
+		Serial.println("Wasn't able to alloc");
 		return;
+	}
 
 	if(rear == NULL) {
 		item->data = value;
@@ -61,8 +64,10 @@ void enqueue(int value){
 
 	node_ptr item = (node_ptr) malloc(sizeof(struct node));
 
-	if (item == NULL)
+	if (item == NULL) {
+		Serial.println("Wasn't able to alloc");
 		return;
+	}
 
 	item->data = value;
 	item->previous = NULL;
@@ -362,9 +367,9 @@ int* detectPeople(float *src, int width, int height, Man *people, int *peopleSiz
 	visited[0] = 1;
 	counter = 1;
 
-	while (isEmpty()) {
+	
+	while (!isEmpty()) {
 		int id = dequeue();
-		
 		int size = 0;
 		int *neighbours = getUnvisitedNeighbours(id, width, height, visited, &size);
 		

@@ -7,6 +7,7 @@
        int y;
        int width;
        int height;
+       int volume;
    }Man;
 
    static const float gausian[5][5] = {
