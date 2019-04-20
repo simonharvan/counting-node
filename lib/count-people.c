@@ -9,12 +9,23 @@
 #define TRUE 1
 #define FALSE 0
 
+#define IMAGE_NUM 10
+
 struct Man
 {
     int x;
     int y;
     int width;
     int height;
+    int space;
+    float intensity;
+    short alreadyCounted;
+};
+
+struct Image {
+	int size;
+	struct Man people[5];
+	long time;
 };
 
 typedef struct node{
@@ -76,8 +87,6 @@ int enqueue(int value){
 int dequeue(){
 
 	if(isEmpty()){
-
-		printf("\nThe queue is empty!\n");
 		return FALSE;
 	}
 	
@@ -97,8 +106,6 @@ void display(){
 
 
 	if(isEmpty()){
-
-		printf("\nThe queue is empty!\n");
 		return;
 	}
 
@@ -118,8 +125,6 @@ void display(){
 int clear(){
 
 	if(isEmpty()){
-
-		printf("\nThe queue is empty!\n");
 		return FALSE;
 	}
 
@@ -389,26 +394,47 @@ int* getNeighbours(int id, int width, int height, int *size) {
 	return result;
 }
 
-void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y) {
+void getObjectsProperties(int *src, float *intensities, int width, int height, int objectNum, int *x, int *y, int *widthOfObject, int *heightOfObject, float* intensity) {
 	int volume = 0;
+	int minX = width, minY = height;
+	int maxX = 0, maxY = 0;
+
+	
 	for (int i = 0; i < height; ++i)
 	{
 		for (int j = 0; j < width; ++j)
 		{
 			if (src[i * width + j] == objectNum) {
+				if (i <= minY) {
+					minY = i;
+				}
+				if (j <= minX) {
+					minX = j;
+				}
+				if (j >= maxX) {
+					maxX = j;
+				}
+				if (i >= maxY) {
+					maxY = i;
+				}
+				
 				*x = *x + i;
 				*y = *y + j;
+				*intensity = *intensity + intensities[i * width + j];
 				volume++;
 			}
 		}
 
 	}
 
+	*widthOfObject = maxX - minX;
+	*heightOfObject = maxY - minY;
 	*x = *x / volume;
 	*y = *y / volume;
+	*intensity = *intensity / volume;
 }
 
-int* detectPeople(float *src, int width, int height, struct Man *people, int *peopleSize) {
+int* detectPeople(float *src, float *intensities, int width, int height, struct Man *people, int *peopleSize) {
 	
 	enqueue(0);
 
@@ -422,10 +448,9 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 	int *volume = (int*) malloc (768 * sizeof(int));
 	memset(volume, 0, 768 * sizeof(int));
 	int counter = 1;
-	int c = 0;
+	
 	while (!isEmpty()) {
-		c++;
-		display();
+		
 		int id = dequeue();
 		int size = 0;
 		int *neighbours = getUnvisitedNeighbours(id, width, height, visited, &size);
@@ -472,18 +497,31 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 		}
 	}
 	clear();
-	printf("%d\n", c);
+	
 
 	// Starting from one because 0 is background
 	for (int i = 1; i < counter; ++i)
 	{
 		// 1 pixel is approx. 2.5 cm^2. So this is 125 cm^2.
 		if (volume[i] > 50) {
+
 			int x = 0, y = 0;
-			findCentroid(objectNum, width, height, i, &x, &y);
-			people[*peopleSize].x = x;
-			people[*peopleSize].y = y;
-			*peopleSize = *peopleSize + 1;
+			int w = 0, h = 0;
+			float intensity = 0;
+			// Centroid x, y and width, height of object and average intensity in object
+			getObjectsProperties(objectNum, intensities, width, height, i, &x, &y, &w, &h, &intensity);
+			
+			// Because of noise everything that is not wider than 12.5 cm is noise.
+			if (w > 5) {
+				people[*peopleSize].x = x;
+				people[*peopleSize].y = y;
+				people[*peopleSize].width = w;
+				people[*peopleSize].height = h;
+				people[*peopleSize].space = volume[i];
+				people[*peopleSize].intensity = intensity;
+				people[*peopleSize].alreadyCounted = 0;
+				*peopleSize = *peopleSize + 1;
+			}
 		}
 	}
 
@@ -492,7 +530,6 @@ int* detectPeople(float *src, int width, int height, struct Man *people, int *pe
 
 int* calculateHistogram(float *src, int size, float *min, float *max) {
 	int *result = (int*)malloc(50 * sizeof(int));
-	memset(result, 0, 50 * sizeof(int));
 	*min = 99999999999;
 	*max = -99999999999;
 
@@ -505,32 +542,149 @@ int* calculateHistogram(float *src, int size, float *min, float *max) {
 			*max = src[i];
 		}
 	}
-	
-	float boundaries[50];
-	boundaries[0] = *min;
-	for (int i = 1; i < 50; ++i)
-	{
-		boundaries[i] = *min + (((*max - *min) / 50) * i);
-	}
-
-	for (int i = 0; i < size; ++i)
-	{
-		for (int j = 0; j < 50 - 1; ++j)
-		{
-			if (src[i] > boundaries[j] && src[i] <= boundaries[j + 1]) {
-				result[j]++;
-			}
-		}
-	}
 
 	return result; 
 }
 
+// detect
+short wasFull = 0;
 
+int getIndexForImages(int index) {
+	if (index < 0) {
+		if (!wasFull) {
+			return -1;
+		}
+		index = IMAGE_NUM - index;
+	}
+	if (index >= IMAGE_NUM) {
+		index = index % IMAGE_NUM;
+		wasFull = 1;
+	}
+	return index;
+}
+
+struct Vertex {
+	struct Man human;
+	struct Edge *edges;
+	int edgesSize;
+};
+
+struct Edge {
+	float weight;
+	struct Vertex to;
+	short correctionEdge;
+};
+
+struct Frame {
+	struct Vertex *vertices;
+	int verticesSize;
+};
+
+struct Graph {
+	struct Frame frames[IMAGE_NUM];
+	int frameSize;
+};
+
+int dotProduct(int *array1, int *array2, int size) {
+	int result = 0;
+	for (int i = 0; i < size; ++i)
+	{
+		result += array1[i] * array2[i];
+	} 
+	return result;
+}
+
+float norm(int *array, int size) {
+	int result = 0;
+	for (int i = 0; i < size; ++i)
+	{
+		result += pow(array[i],2);
+	}
+	return sqrt(result);
+}
+int* subtract2dVector(int *array1, int *array2, int size) {
+	int *result = (int*) malloc (size * sizeof(int));
+	for (int i = 0; i < size; ++i){
+		result[i] = array1[i] - array2[i];
+	}
+	return result;
+}
+
+const float alpha = 0.1;
+
+void addEdges(struct Graph *graph, short correctionEdge) {
+	int edgesSize;
+	for (int i = 0; i < graph->frameSize - 1; ++i)
+	{
+		for (int j = 0; j < graph->frames[i].verticesSize; ++j) 
+		{
+			for (int k = 0; k < graph->frames[i+1].verticesSize; ++k)
+			{
+				edgesSize = graph->frames[i].vertices[j].edgesSize;
+				graph->frames[i].vertices[j].edges[edgesSize].to = graph->frames[i+1].vertices[k];
+				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = correctionEdge;
+				
+				int from[2] = { graph->frames[i].vertices[j].human.x, graph->frames[i].vertices[j].human.y };
+				int to[2] = { graph->frames[i+1].vertices[k].human.x, graph->frames[i+1].vertices[k].human.y };
+
+				graph->frames[i].vertices[j].edges[edgesSize].weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
+				graph->frames[i].vertices[j].edgesSize++;
+			}
+		}
+	}
+	
+}
+
+void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
+	
+}
+
+
+
+void detectDirection(struct Image *images, int currentImage, int *in, int *out) {
+	int previousSize = 0;
+	
+	struct Graph graph;
+	graph.frameSize = 0;
+	for (int i = currentImage; i >= currentImage - IMAGE_NUM; --i){
+		int index = getIndexForImages(i);
+		if (index == -1) {
+			continue;
+		}
+		graph.frames[graph.frameSize].vertices = (struct Vertex*) malloc(images[index].size * sizeof(struct Vertex));
+		struct Frame *frame = &graph.frames[graph.frameSize];
+		frame->verticesSize = 0;
+		struct Man *people = images[index].people;
+		for (int j = 0; j < images[index].size; ++j){
+			frame->vertices[frame->verticesSize].human = people[j];
+			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(2 * sizeof(struct Edge));
+			frame->verticesSize++;
+		}
+		graph.frameSize++;
+		for (int i = 0; i < graph.frameSize - 1; ++i)
+		{
+			addEdges(&graph, 0);
+		}
+		calculateVertexDisjointMaximumWeightPathCover(&graph);
+	}
+	
+	
+
+	for (int i = 0; i < graph.frameSize; ++i)
+	{
+		for (int j = 0; j < graph.frames[i].verticesSize; ++i)
+		{
+			free(graph.frames[i].vertices[j].edges);
+		}
+		free(graph.frames[i].vertices);
+	}
+	free(graph.frames);
+}
 
 int main ( void )
 {
-	static const char filename[] = "tmp-3";
+	
+	static const char filename[] = "in-gaussian-sideways";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
@@ -557,15 +711,16 @@ int main ( void )
 		perror ( normalizedFilename ); /* why didn't the file open? */
 		return 0;
 	}
-
-	// char line [ 12000 ]; /* or other suitable maximum line size */
 	
-	float *numbers = (float* )malloc(768 * sizeof(float));
+
+	
+	struct Image images[IMAGE_NUM];
+	int imagesIndex = 0; 
+	float numbers[768];
 	memset(numbers, 0, 768);
 
 	int *histogram;
 	
-	struct Man *people = malloc(10 * sizeof(struct Man));
 	int peopleSize = 0;
 
 	int lineNum = 0;
@@ -577,6 +732,8 @@ int main ( void )
 	ssize_t read;
 	char *line = NULL;
 	size_t len = 0;
+	int in = 0, out = 0;
+	long currentImage = 0;
 
 	while ((read = getline(&line, &len, file)) != -1) {
 		trainingCycles++;
@@ -594,46 +751,39 @@ int main ( void )
 		{
 			numbers[i] = strtof(numberStrings[i], NULL);
 		}
+
+		float gaussians[768];
+		memcpy(gaussians, numbers, sizeof(gaussians));
+		// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
+		// printFloatMatrix(normalizeFile, gaussians, 32, 24);
+
+		calculateHistogram(gaussians, 768, &min, &max);
+		float threshold = findThreshold(gaussians, 768, (max - min) / 10);
+		
+		setThreshold(gaussians, 768, threshold);
+		imagesIndex = getIndexForImages(imagesIndex);
+		peopleSize = images[imagesIndex].size = 0;
+		int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
+		images[imagesIndex].size = peopleSize;
+		images[imagesIndex].time = currentImage;
 		
 
-		// if (trainingCycles < AVG_TRAINING) {
-		// 	float avg = findAvg(numbers, 768);
-		// 	if (avg > maxOfBackground){
-		// 		maxOfBackground = avg;
-		// 	}
-		// 	continue;
-		// }
+		printIntMatrix(outputfile, detected, 32, 24);
 		
-		// normalize(numbers, 768);
-		
-		
-		// float avg = findAvg(numbers, 768);
-		// float threshold = findAvg(numbers, 768);
-		
-		// if (threshold > maxOfBackground) {
-		// 	numbers = applyGaussian(numbers, 32, 24, gausian);
-		// 	printFloatMatrix(normalizeFile, numbers, 32, 24);
+		// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
+		struct Man *people = images[imagesIndex].people;
+		printf("Image n. %d\n", imagesIndex);
+		for (int i = 0; i < images[imagesIndex].size; ++i)
+		{
+			printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
+		}
 
+		detectDirection(images, imagesIndex, &in, &out);
 
-		// 	histogram = calculateHistogram(numbers, 768, &min, &max);
-		// 	threshold = findThreshold(numbers, 768, (max - min) / 2);
-			
-		// 	setThreshold(numbers, 768, threshold);
+		// printf("In - %d, Out - %d \n", in, out);
 
-			int *detected = detectPeople(numbers, 32, 24, people, &peopleSize);
-			printIntMatrix(outputfile, detected, 32, 24);
-			// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
-			// for (int i = 0; i < peopleSize; ++i)
-			// {
-			// 	printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
-			// }
-			
-		// }
-		
-		// if (trainingCycles % 10) {
-		// 	peopleSize = 0;
-		// }
-		
+		imagesIndex++;
+		currentImage++;
 	}
 	fclose ( outputfile );
 	fclose ( normalizeFile );
