@@ -5,11 +5,15 @@
 
 #include <stdio.h>
 
-
 #define TRUE 1
 #define FALSE 0
 
 #define IMAGE_NUM 10
+#define MAX_PEOPLE 5 /// Maximum possible people in one frame
+#define MAX_PEOPLE_2 25 /// Maximum possible people in two frame
+#define MAX_VERTICES 100
+#define INF (1<<29)
+#define NIL -1
 
 struct Man
 {
@@ -24,7 +28,7 @@ struct Man
 
 struct Image {
 	int size;
-	struct Man people[5];
+	struct Man people[MAX_PEOPLE];
 	long time;
 };
 
@@ -345,6 +349,18 @@ int findMax(int *array, int size, int *returnIndex) {
 	return max;
 }
 
+float findMaxFloat(float *array, int size, int *returnIndex) {
+	float max = -99999;
+	for (int i = 0; i < size; ++i)
+	{
+		if (array[i] > max) {
+			max = array[i];
+			*(returnIndex) = i;
+		}
+	}
+	return max;
+}
+
 
 int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *size) {
 	int x = id % width;
@@ -564,9 +580,12 @@ int getIndexForImages(int index) {
 }
 
 struct Vertex {
+	int idLeft;
+	int idRight;
 	struct Man human;
 	struct Edge *edges;
 	int edgesSize;
+	int frameIndex;
 };
 
 struct Edge {
@@ -610,36 +629,146 @@ int* subtract2dVector(int *array1, int *array2, int size) {
 	return result;
 }
 
-const float alpha = 0.1;
 
-void addEdges(struct Graph *graph, short correctionEdge) {
-	int edgesSize;
-	for (int i = 0; i < graph->frameSize - 1; ++i)
+int* bruteForceInternal(int size, struct Vertex *vertices, int verticesSize, short *leftMatched, short *rightMatched, int edgeUpTo, int matchCount, float *resultBestCost, int *besteEdgesCounter) {
+	if (matchCount == size) {
+		int *result = (int*) malloc (MAX_PEOPLE_2 * sizeof(int));
+		return result;
+	}
+	*besteEdgesCounter = 0;
+	int bestCost = 1 << 20;
+	int *bestEdges = (int*) malloc (MAX_PEOPLE_2 * sizeof(int));
+	
+	for (int i = 0; i < verticesSize; ++i)
 	{
-		for (int j = 0; j < graph->frames[i].verticesSize; ++j) 
-		{
-			for (int k = 0; k < graph->frames[i+1].verticesSize; ++k)
-			{
-				edgesSize = graph->frames[i].vertices[j].edgesSize;
-				graph->frames[i].vertices[j].edges[edgesSize].to = graph->frames[i+1].vertices[k];
-				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = correctionEdge;
-				
-				int from[2] = { graph->frames[i].vertices[j].human.x, graph->frames[i].vertices[j].human.y };
-				int to[2] = { graph->frames[i+1].vertices[k].human.x, graph->frames[i+1].vertices[k].human.y };
+		for (int edgeIndex = edgeUpTo; edgeIndex < vertices[i].edgesSize; ++edgeIndex) {
+			struct Vertex vertex = vertices[i];
+			if (!leftMatched[vertex.idLeft] && !rightMatched[vertex.edges[edgeIndex].to.idRight]) {
+				leftMatched[vertex.idLeft] = TRUE;
+				rightMatched[vertex.edges[edgeIndex].to.idRight] = TRUE;
+				float resultCost;
+				int *remainder = bruteForceInternal(size, vertices, verticesSize, leftMatched, rightMatched, edgeIndex + 1, matchCount + 1, &resultCost, besteEdgesCounter);
+				leftMatched[vertex.idLeft] = FALSE;
+				rightMatched[vertex.edges[edgeIndex].to.idRight] = FALSE;
 
-				graph->frames[i].vertices[j].edges[edgesSize].weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
-				graph->frames[i].vertices[j].edgesSize++;
+				if (resultCost + vertex.edges[edgeIndex].weight < bestCost) {
+					bestCost = resultCost + vertex.edges[edgeIndex].weight;
+					free(bestEdges);
+					bestEdges = remainder;
+					*(bestEdges + *besteEdgesCounter) = vertex.idLeft * verticesSize + edgeIndex;
+					*besteEdgesCounter = *besteEdgesCounter + 1;
+				}
 			}
+		}
+	}
+	
+	*resultBestCost = bestCost;
+	return bestEdges;
+}
+
+struct Vertex findVertexById(struct Vertex *vertices, int verticesSize, int vertexId) {
+	for (int i = 0; i < verticesSize; ++i)
+	{
+		if (vertices[i].idLeft == vertexId) {
+			return vertices[i];
 		}
 	}
 	
 }
 
-void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
-	
+void greedyMatchingAll(struct Graph *graph) {
+	short *leftMatched = (short*) malloc(MAX_VERTICES * sizeof(short));
+	short *rightMatched = (short*) malloc(MAX_VERTICES * sizeof(short));
+	struct Vertex vertices[MAX_VERTICES];
+	int counter = 0;
+	for (int i = 0; i < graph->frameSize; ++i)
+	{
+		for (int j = 0; j < graph->frames[i].verticesSize; ++j)
+		{
+			vertices[counter++] = graph->frames[i].vertices[j];
+		}
+	}
+
+	float resultCost;
+	int besteEdgesCounter = 0;
+	int* edgeIndices = bruteForceInternal(counter, vertices, counter, leftMatched, rightMatched, 0, 0, &resultCost, &besteEdgesCounter);
+	int matching[100];
+	for (int i = 0; i < besteEdgesCounter; ++i) {
+		int vertexId = edgeIndices[i] / counter;
+		int edgeIndex = edgeIndices[i] % counter;
+		struct Vertex vertex = findVertexById(vertices, counter, vertexId);
+		vertex.edges[0] = vertex.edges[edgeIndex];
+		vertex.edgesSize = 1;
+		printf("[ALL] Matching from - %d to - %d\n", vertex.idLeft, vertex.edges[edgeIndex].to.idRight);
+	}
+	free(edgeIndices);
+	free(leftMatched);
+	free(rightMatched);
 }
 
+void greedyMatching(struct Frame *frame) {
+	short *leftMatched = (short*) malloc(MAX_PEOPLE_2 * sizeof(short));
+	short *rightMatched = (short*) malloc(MAX_PEOPLE_2 * sizeof(short));
+	float resultCost;
+	int besteEdgesCounter = 0;
+	int* edgeIndices = bruteForceInternal(frame->verticesSize, frame->vertices, frame->verticesSize, leftMatched, rightMatched, 0, 0, &resultCost, &besteEdgesCounter);
+	int matching[100];
+	for (int i = 0; i < besteEdgesCounter; ++i) {
+		int vertexId = edgeIndices[i] / frame->verticesSize;
+		int edgeIndex = edgeIndices[i] % frame->verticesSize;
+		struct Vertex vertex = findVertexById(frame->vertices, frame->verticesSize, vertexId);
+		vertex.edges[0] = vertex.edges[edgeIndex];
+		vertex.edgesSize = 1;
+		printf("[2 frame] Matching from - %d to - %d\n", vertex.idLeft, vertex.edges[edgeIndex].to.idRight);
+	}
+	free(edgeIndices);
+	free(leftMatched);
+	free(rightMatched);
+}
 
+void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
+	if (graph->frameSize > 2) {
+		greedyMatchingAll(graph);
+	}else if (graph->frameSize == 2) {
+		greedyMatching(&graph->frames[0]);
+	}
+}
+
+const float alpha = 0.1;
+
+// Go through all frames and add edges to last frame vertices. 
+// If the vertex is terminal it is extension edge, if the vertex is not terminal it is correction edge.
+void addEdges(struct Graph *graph) {
+	int edgesSize;
+	if (graph->frameSize < 1 ) {
+		return;
+	}
+	// All frames except last one
+	for (int i = 0; i < graph->frameSize; ++i)
+	{
+		// All vertices in frame
+		for (int j = 0; j < graph->frames[i].verticesSize; ++j) 
+		{
+			// Only iterating through last frame
+			for (int k = 0; k < graph->frames[graph->frameSize].verticesSize; ++k)
+			{
+				edgesSize = graph->frames[i].vertices[j].edgesSize;
+				graph->frames[i].vertices[j].edges[edgesSize].to = graph->frames[i+1].vertices[k];
+
+				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
+
+				int from[2] = { graph->frames[i].vertices[j].human.x, graph->frames[i].vertices[j].human.y };
+				int to[2] = { graph->frames[i+1].vertices[k].human.x, graph->frames[i+1].vertices[k].human.y };
+
+				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
+				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
+				
+				graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
+				graph->frames[i].vertices[j].edgesSize++;
+			}
+		}
+	}
+}
 
 void detectDirection(struct Image *images, int currentImage, int *in, int *out) {
 	int previousSize = 0;
@@ -656,30 +785,31 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		frame->verticesSize = 0;
 		struct Man *people = images[index].people;
 		for (int j = 0; j < images[index].size; ++j){
+			frame->vertices[frame->verticesSize].idLeft = index * IMAGE_NUM * 2 + j * 2;
+			frame->vertices[frame->verticesSize].idRight = index * IMAGE_NUM * 2 + j * 2 + 1;
 			frame->vertices[frame->verticesSize].human = people[j];
-			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(2 * sizeof(struct Edge));
+			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(MAX_PEOPLE * sizeof(struct Edge));
+			frame->vertices[frame->verticesSize].edgesSize = 0;
+			frame->vertices[frame->verticesSize].frameIndex = graph.frameSize;
 			frame->verticesSize++;
 		}
-		graph.frameSize++;
-		for (int i = 0; i < graph.frameSize - 1; ++i)
-		{
-			addEdges(&graph, 0);
-		}
+		
+		
+		addEdges(&graph);
 		calculateVertexDisjointMaximumWeightPathCover(&graph);
+		graph.frameSize++;
 	}
 	
-	
-
 	for (int i = 0; i < graph.frameSize; ++i)
 	{
-		for (int j = 0; j < graph.frames[i].verticesSize; ++i)
+		for (int j = 0; j < graph.frames[i].verticesSize; ++j)
 		{
 			free(graph.frames[i].vertices[j].edges);
 		}
 		free(graph.frames[i].vertices);
 	}
-	free(graph.frames);
 }
+
 
 int main ( void )
 {
@@ -777,9 +907,9 @@ int main ( void )
 		{
 			printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
 		}
-
-		detectDirection(images, imagesIndex, &in, &out);
-
+		if (imagesIndex == 4) {
+			detectDirection(images, imagesIndex, &in, &out);
+		}	
 		// printf("In - %d, Out - %d \n", in, out);
 
 		imagesIndex++;
