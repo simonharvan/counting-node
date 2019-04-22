@@ -591,12 +591,12 @@ struct Vertex {
 
 struct Edge {
 	float weight;
-	struct Vertex to;
+	struct Vertex *to;
 	short correctionEdge;
 };
 
 struct Frame {
-	struct Vertex *vertices;
+	struct Vertex vertices[MAX_PEOPLE];
 	int verticesSize;
 };
 
@@ -670,7 +670,6 @@ char** hungarian(int **array, int width, int height) {
 			results[i][j]=FALSE;
 
 	// Begin subtract column minima in order to start with lots of zeroes 12
-	printf("Using heuristic\n");
 	for (l=0;l<n;l++){
 		s=array[0][l];
 		for (k=1;k<n;k++)
@@ -684,13 +683,12 @@ char** hungarian(int **array, int width, int height) {
 	// End subtract column minima in order to start with lots of zeroes 12
 
 	// Begin initial state 16
-	t=0;
-	for (l=0;l<n;l++)
-	{
-	row_mate[l]= -1;
-	parent_row[l]= -1;
-	col_inc[l]=0;
-	slack[l]=INF;
+	t = 0;
+	for (l = 0; l < n; l++){
+		row_mate[l]= -1;
+		parent_row[l]= -1;
+		col_inc[l]=0;
+		slack[l]=INF;
 	}
 	for (k=0;k<m;k++)
 	{
@@ -704,13 +702,11 @@ char** hungarian(int **array, int width, int height) {
 	  {
 	    col_mate[k]=l;
 	    row_mate[l]=k;
-	    if (verbose)
-	      printf("matching col %d==row %d\n",l,k);
+	    
 	    goto row_done;
 	  }
 	col_mate[k]= -1;
-	if (verbose)
-	  printf("node %d: unmatched row %d\n",t,k);
+	
 	unchosen_row[t++]=k;
 	row_done:
 	;
@@ -723,8 +719,7 @@ char** hungarian(int **array, int width, int height) {
 	unmatched=t;
 	while (1)
 	{
-		if (verbose)
-		  printf("Matched %d rows.\n",m-t);
+		
 		q=0;
 		while (1)
 		{
@@ -747,9 +742,7 @@ char** hungarian(int **array, int width, int height) {
 		                goto breakthru;
 		              slack[l]=0;
 		              parent_row[l]=k;
-		              if (verbose)
-		                printf("node %d: row %d==col %d--row %d\n",
-		                  t,row_mate[l],l,k);
+		              
 		              unchosen_row[t++]=row_mate[l];
 		            }
 		            else
@@ -779,10 +772,7 @@ char** hungarian(int **array, int width, int height) {
 		      {
 		        // Begin look at a new zero 22
 		        k=slack_row[l];
-		        if (verbose)
-		          printf(
-		            "Decreasing uncovered elements by %d produces zero at [%d,%d]\n",
-		            s,k,l);
+		        
 		        if (row_mate[l]<0)
 		        {
 		          for (j=l+1;j<n;j++)
@@ -793,8 +783,7 @@ char** hungarian(int **array, int width, int height) {
 		        else
 		        {
 		          parent_row[l]=k;
-		          if (verbose)
-		            printf("node %d: row %d==col %d--row %d\n",t,row_mate[l],l,k);
+		          
 		          unchosen_row[t++]=row_mate[l];
 		        }
 		        // End look at a new zero 22
@@ -806,15 +795,13 @@ char** hungarian(int **array, int width, int height) {
 		}
 		breakthru:
 		// Begin update the matching 20
-		if (verbose)
-		  printf("Breakthrough at node %d of %d!\n",q,t);
+		
 		while (1)
 		{
 		  j=col_mate[k];
 		  col_mate[k]=l;
 		  row_mate[l]=k;
-		  if (verbose)
-		    printf("rematching col %d==row %d\n",l,k);
+		 
 		  if (j<0)
 		    break;
 		  k=parent_row[j];
@@ -833,8 +820,6 @@ char** hungarian(int **array, int width, int height) {
 		for (k=0;k<m;k++)
 		  if (col_mate[k]<0)
 		  {
-		    if (verbose)
-		      printf("node %d: unmatched row %d\n",t,k);
 		    unchosen_row[t++]=k;
 		  }
 	// End get ready for another stage 17
@@ -881,47 +866,65 @@ char** hungarian(int **array, int width, int height) {
 		}
 	/*TRACE("\n");*/
 	}
-	for (i=0;i<m;i++)
+	for (i=0;i<m;i++){
 		cost+=row_dec[i];
-		for (i=0;i<n;i++)
-			cost-=col_inc[i];
+	}
 
-	printf("Cost is %d\n",cost);
+	for (i=0;i<n;i++){
+		cost-=col_inc[i];
+	}
+
 	return results;
 }
 
-int findVertexById(struct Vertex *vertices, int verticesSize, int vertexId, struct Vertex *vertex) {
-	for (int i = 0; i < verticesSize; ++i)
-	{
-		if (vertices[i].idLeft == vertexId || vertices[i].idRight == vertexId) {
-			vertex = &vertices[i];
+int findVertexById(struct Vertex *vertices, int verticesSize, int vertexId, struct Vertex **vertex) {
+ 	for (int i = 0; i < verticesSize; ++i)
+ 	{
+ 		if (vertices[i].idLeft == vertexId || vertices[i].idRight == vertexId) {
+			*vertex = &vertices[i];
 			return 0;
-		}
-	}	
+
+ 		}	
+ 	}	
 	return -1;
 }
 
 
-int findVertexByIdInGraph(struct Graph *graph, int vertexId, struct Vertex *vertex) {
+int findVertexByIdInGraph(struct Graph *graph, int vertexId, struct Vertex **vertex) {
 	int status;
 	
 	for (int i = 0; i < graph->frameSize; ++i)
 	{
-		 status = findVertexById(graph->frames[i].vertices, graph->frames[i].verticesSize, vertexId, &vertex);
-		 if (status != -1){
-		 	return status;
-		 }
-	}
+		status = findVertexById(graph->frames[i].vertices, graph->frames[i].verticesSize, vertexId, &*vertex);
+		if (status != -1){
+			return status;
+		}
+ 	}
 	return -1;
+
+	
 }
 
-void greedyMatchingAll(struct Graph *graph) {
-	
+void removeEdgesFromVertexExceptToId(struct Vertex *vertex,int idLeft) {
+	for (int i = 0; i < vertex->edgesSize; ++i)
+	{
+		if (vertex->edges[i].to->idLeft == idLeft) {
+			vertex->edges[0] = vertex->edges[i];
+			vertex->edgesSize = 1;
+			printf("removed");
+		}
+	}
+}
+
+
+void hungarianMatch(struct Graph *graph) {
 
 	int counter = 0;
-	
-
-	
+	for (int i = 0; i <= graph->frameSize; ++i)
+	{
+		counter += graph->frames[i].verticesSize;
+	}
+	printf("Hungarian\n");
 	int size = counter;
 	int **array = (int**) malloc(size *  sizeof(int*));
 	for (int i = 0; i < size; ++i)
@@ -937,12 +940,11 @@ void greedyMatchingAll(struct Graph *graph) {
 			for (int k = 0; k < graph->frames[i].vertices[j].edgesSize; ++k)
 			{
 				int idPlus = graph->frames[i].vertices[j].idRight / 2;
-				int idMinus = (graph->frames[i].vertices[j].edges[k].to.idLeft - 1) / 2;
+				int idMinus = (graph->frames[i].vertices[j].edges[k].to->idLeft - 1) / 2;
 				array[idPlus][idMinus] = graph->frames[i].vertices[j].edges[k].weight;
 			}
 		}
-	}
-
+	}	
 	for (int i = 0; i < size; ++i)
 	{
 		for (int j = 0; j < size; ++j)
@@ -951,14 +953,21 @@ void greedyMatchingAll(struct Graph *graph) {
 		}
 		printf("\n");
 	}
+
+
 	char **results = hungarian(array, size, size);
+	struct Vertex *vertex;
 	for (int i = 0; i < size - 2; ++i)
 	{
 		for (int j = 0; j < size; ++j)
 		{
 			if (results[i][j]){
-				struct Vertex vertex;
-				findVertexByIdInGraph(graph, i * 2, &vertex);
+				int idRight = i * 2;
+				int idLeft = j * 2 + 1;
+				int status = findVertexByIdInGraph(graph, idRight, &vertex);
+				removeEdgesFromVertexExceptToId(vertex, idLeft);
+				printf("Frame - %d Vertex id - %d\n",vertex->frameIndex, vertex->idLeft);
+
 			}
 		}
 	}
@@ -966,29 +975,9 @@ void greedyMatchingAll(struct Graph *graph) {
 	      
 }
 
-// void greedyMatching(struct Frame *frame) {
-// 	short *leftMatched = (short*) malloc(MAX_PEOPLE_2 * sizeof(short));
-// 	short *rightMatched = (short*) malloc(MAX_PEOPLE_2 * sizeof(short));
-// 	float resultCost;
-// 	int besteEdgesCounter = 0;
-// 	int* edgeIndices = bruteForceInternal(frame->verticesSize, frame->vertices, frame->verticesSize, leftMatched, rightMatched, 0, 0, &resultCost, &besteEdgesCounter);
-// 	int matching[100];
-// 	for (int i = 0; i < besteEdgesCounter; ++i) {
-// 		int vertexId = edgeIndices[i] / frame->verticesSize;
-// 		int edgeIndex = edgeIndices[i] % frame->verticesSize;
-// 		struct Vertex vertex = findVertexById(frame->vertices, frame->verticesSize, vertexId);
-// 		vertex.edges[0] = vertex.edges[edgeIndex];
-// 		vertex.edgesSize = 1;
-// 		printf("[2 FRAME] Matching from - %d to - %d\n", vertex.idLeft, vertex.edges[edgeIndex].to.idRight);
-// 	}
-// 	free(edgeIndices);
-// 	free(leftMatched);
-// 	free(rightMatched);
-// }
-
 void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
 	if (graph->frameSize > 1) {
-		greedyMatchingAll(graph);
+		hungarianMatch(graph);
 	}
 }
 
@@ -1008,15 +997,15 @@ void addEdges(struct Graph *graph) {
 		for (int j = 0; j < graph->frames[i].verticesSize; ++j) 
 		{
 			// Only iterating through last frame
-			for (int k = 0; k < graph->frames[i+1].verticesSize; ++k)
+			for (int k = 0; k < graph->frames[graph->frameSize].verticesSize; ++k)
 			{
 				edgesSize = graph->frames[i].vertices[j].edgesSize;
-				graph->frames[i].vertices[j].edges[edgesSize].to = graph->frames[i+1].vertices[k];
+				graph->frames[i].vertices[j].edges[edgesSize].to = &graph->frames[graph->frameSize].vertices[k];
 
 				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
 
 				int from[2] = { graph->frames[i].vertices[j].human.x, graph->frames[i].vertices[j].human.y };
-				int to[2] = { graph->frames[i+1].vertices[k].human.x, graph->frames[i+1].vertices[k].human.y };
+				int to[2] = { graph->frames[graph->frameSize].vertices[k].human.x, graph->frames[graph->frameSize].vertices[k].human.y };
 
 				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
 				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
@@ -1025,6 +1014,23 @@ void addEdges(struct Graph *graph) {
 				graph->frames[i].vertices[j].edgesSize++;
 			}
 		}
+	}
+}
+
+void printPaths(struct Graph graph) {
+	if (graph.frameSize < 2) {
+		return;
+	}
+
+	int counter = 1;
+	for (int i = 0; i < graph.frames[0].verticesSize; ++i)
+	{
+		struct Vertex *vertex = &graph.frames[0].vertices[i];
+		while(vertex->edgesSize > 0){
+			printf("Path %d - x: %d y: %d\n", counter, vertex->human.x, vertex->human.y);
+			vertex = vertex->edges[0].to;
+		}
+		counter++;
 	}
 }
 
@@ -1039,7 +1045,7 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		if (index == -1) {
 			continue;
 		}
-		graph.frames[graph.frameSize].vertices = (struct Vertex*) malloc(images[index].size * sizeof(struct Vertex));
+		
 		struct Frame *frame = &graph.frames[graph.frameSize];
 		frame->verticesSize = 0;
 		struct Man *people = images[index].people;
@@ -1047,15 +1053,15 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 			frame->vertices[frame->verticesSize].idRight = idCounter++;
 			frame->vertices[frame->verticesSize].idLeft = idCounter++;
 			frame->vertices[frame->verticesSize].human = people[j];
-			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(MAX_PEOPLE * sizeof(struct Edge));
+			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(MAX_PEOPLE_2 * sizeof(struct Edge));
 			frame->vertices[frame->verticesSize].edgesSize = 0;
 			frame->vertices[frame->verticesSize].frameIndex = graph.frameSize;
 			frame->verticesSize++;
 		}
-		
-		
+
 		addEdges(&graph);
 		calculateVertexDisjointMaximumWeightPathCover(&graph);
+		printPaths(graph);
 		graph.frameSize++;
 	}
 	
@@ -1065,7 +1071,6 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		{
 			free(graph.frames[i].vertices[j].edges);
 		}
-		free(graph.frames[i].vertices);
 	}
 }
 struct Image* initImages() {
@@ -1156,61 +1161,61 @@ int main ( void )
 	int in = 0, out = 0;
 	long currentImage = 0;
 
-	// while ((read = getline(&line, &len, file)) != -1) {
-	// 	trainingCycles++;
+	while ((read = getline(&line, &len, file)) != -1) {
+		trainingCycles++;
 		
 		
-	// 	char *numberStrings[768];
-	// 	memset(numberStrings, 0, 768);
-	// 	int i = 0;
-	// 	char *p = strtok( line, ",");
-	// 	while (p != NULL) {
-	// 		numberStrings[i++] = p;
-	// 		p = strtok(NULL, ",");
-	// 	}
-	// 	for (int i = 0; i < 768; ++i)
-	// 	{
-	// 		numbers[i] = strtof(numberStrings[i], NULL);
-	// 	}
+		char *numberStrings[768];
+		memset(numberStrings, 0, 768);
+		int i = 0;
+		char *p = strtok( line, ",");
+		while (p != NULL) {
+			numberStrings[i++] = p;
+			p = strtok(NULL, ",");
+		}
+		for (int i = 0; i < 768; ++i)
+		{
+			numbers[i] = strtof(numberStrings[i], NULL);
+		}
 
-	// 	float gaussians[768];
-	// 	memcpy(gaussians, numbers, sizeof(gaussians));
-	// 	// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
-	// 	// printFloatMatrix(normalizeFile, gaussians, 32, 24);
+		float gaussians[768];
+		memcpy(gaussians, numbers, sizeof(gaussians));
+		// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
+		// printFloatMatrix(normalizeFile, gaussians, 32, 24);
 
-	// 	calculateHistogram(gaussians, 768, &min, &max);
-	// 	float threshold = findThreshold(gaussians, 768, (max - min) / 10);
+		calculateHistogram(gaussians, 768, &min, &max);
+		float threshold = findThreshold(gaussians, 768, (max - min) / 10);
 		
-	// 	setThreshold(gaussians, 768, threshold);
-	// 	imagesIndex = getIndexForImages(imagesIndex);
-	// 	peopleSize = images[imagesIndex].size = 0;
-	// 	int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
-	// 	images[imagesIndex].size = peopleSize;
-	// 	images[imagesIndex].time = currentImage;
+		setThreshold(gaussians, 768, threshold);
+		imagesIndex = getIndexForImages(imagesIndex);
+		peopleSize = images[imagesIndex].size = 0;
+		int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
+		images[imagesIndex].size = peopleSize;
+		images[imagesIndex].time = currentImage;
 		
 
-	// 	printIntMatrix(outputfile, detected, 32, 24);
+		printIntMatrix(outputfile, detected, 32, 24);
 		
-	// 	// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
-	// 	struct Man *people = images[imagesIndex].people;
-	// 	printf("Image n. %d\n", imagesIndex);
-	// 	for (int i = 0; i < images[imagesIndex].size; ++i)
-	// 	{
-	// 		printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
-	// 	}
-	// 	struct Image *imageTest = initImages();
-	// 	if (imagesIndex == 4) {
-	// 		detectDirection(imageTest, imagesIndex, &in, &out);
-	// 	}	
+		// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
+		struct Man *people = images[imagesIndex].people;
+		printf("Image n. %d\n", imagesIndex);
+		for (int i = 0; i < images[imagesIndex].size; ++i)
+		{
+			printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
+		}
+		struct Image *imageTest = initImages();
+		if (imagesIndex == 4) {
+			detectDirection(imageTest, imagesIndex, &in, &out);
+		}	
 		
-	// 	// printf("In - %d, Out - %d \n", in, out);
+		// printf("In - %d, Out - %d \n", in, out);
 
-	// 	imagesIndex++;
-	// 	currentImage++;
-	// }
-	struct Image *imageTest = initImages();
+		imagesIndex++;
+		currentImage++;
+	}
+	// struct Image *imageTest = initImages();
 		
-	detectDirection(imageTest, 4, &in, &out);
+	// detectDirection(imageTest, 4, &in, &out);
 		
 	fclose ( outputfile );
 	fclose ( normalizeFile );
