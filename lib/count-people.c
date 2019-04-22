@@ -18,7 +18,7 @@
 
 struct Man
 {
-    int x;
+	int x;
     int y;
     int width;
     int height;
@@ -583,7 +583,7 @@ int getIndexForImages(int index) {
 struct Vertex {
 	int idLeft;
 	int idRight;
-	struct Man human;
+	struct Man *human;
 	struct Edge *edges;
 	int edgesSize;
 	int frameIndex;
@@ -631,250 +631,253 @@ int* subtract2dVector(int *array1, int *array2, int size) {
 }
 
 
-char** hungarian(int **array, int width, int height) {
-	char **results = (char**) malloc(height * sizeof(char*));
-	for (int i = 0; i < height; ++i)
-	{
-		results[i] = (char*) malloc(width * sizeof(char));
-	}
-	int i,j;
-	
+char** hungarian(int **array, int width, int height)
+{
+    char **results = (char **)
+    malloc(height * sizeof(char *));
+    for (int i = 0; i < height; ++i){
+        results[i] = (char *)
+        malloc(width * sizeof(char));
+    }
+    int i, j;
+    unsigned int m = height, n = width;
+    int k;
+    int l;
+    int s;
+    int *col_mate = (int *)
+    malloc(height * sizeof(int));
+    col_mate[0] = 0;
+    int *row_mate = (int *)
+    malloc(width * sizeof(int));
+    row_mate[0] = 0;
+    int *parent_row = (int *)
+    malloc(width * sizeof(int));
+    parent_row[0] = 0;
+    int *unchosen_row = (int *)
+    malloc(height * sizeof(int));
+    unchosen_row[0] = 0;
+    int t;
+    int q;
+    int *row_dec = (int *)
+    malloc(height * sizeof(int));
+    row_dec[0] = 0;
+    int *col_inc = (int *)
+    malloc(width * sizeof(int));
+    col_inc[0] = 0;
+    int *slack = (int *)
+    malloc(width * sizeof(int));
+    slack[0] = 0;
+    int *slack_row = (int *)
+    malloc(width * sizeof(int));
+    slack_row[0] = 0;
+    int unmatched;
+    int cost = 0;
 
-	unsigned int m=height,n=width;
-	int k;
-	int l;
-	int s;
-	int *col_mate = (int*) malloc(height * sizeof(int));
-	col_mate[0] = 0;
-	int *row_mate = (int*) malloc(width * sizeof(int));
-	row_mate[0] = 0;
-	int *parent_row = (int*) malloc(width * sizeof(int));
-	parent_row[0] = 0;
-	int *unchosen_row = (int*) malloc(height * sizeof(int));
-	unchosen_row[0] = 0;
-	int t;
-	int q;
-	int *row_dec = (int*) malloc(height * sizeof(int));
-	row_dec[0] = 0;
-	int *col_inc = (int*) malloc(width * sizeof(int));
-	col_inc[0] = 0;
-	int *slack = (int*) malloc(width * sizeof(int));
-	slack[0] = 0;
-	int *slack_row = (int*) malloc(width * sizeof(int));
-	slack_row[0] = 0;
-	int unmatched;
-	int cost=0;
+    for (i = 0; i < height; ++i)
+        for (j = 0; j < width; ++j)
+            results[i][j] = FALSE;
 
-	for (i=0;i<height;++i)
-		for (j=0;j<width;++j)
-			results[i][j]=FALSE;
+    // Begin subtract column minima in order to start with lots of zeroes 12
+    for (l = 0; l < n; l++) {
+        s = array[0][l];
+        for (k = 1; k < n; k++)
+            if (array[k][l] < s)
+                s = array[k][l];
+        cost += s;
+        if (s != 0)
+            for (k = 0; k < n; k++)
+                array[k][l] -= s;
+    }
+    // End subtract column minima in order to start with lots of zeroes
 
-	// Begin subtract column minima in order to start with lots of zeroes 12
-	for (l=0;l<n;l++){
-		s=array[0][l];
-		for (k=1;k<n;k++)
-			if (array[k][l]<s)
-				s=array[k][l];
-		cost+=s;
-		if (s!=0)
-			for (k=0;k<n;k++)
-	    		array[k][l]-=s;
-	}
-	// End subtract column minima in order to start with lots of zeroes 12
+    // Begin initial state
+    t = 0;
+    for (l = 0; l < n; l++) {
+        row_mate[l] = -1;
+        parent_row[l] = -1;
+        col_inc[l] = 0;
+        slack[l] = INF;
+    }
+    for (k = 0; k < m; k++) {
+        s = array[k][0];
+        for (l = 1; l < n; l++){
+            if (array[k][l] < s){
+                s = array[k][l];
+            }
+        }
+        row_dec[k] = s;
+        for (l = 0; l < n; l++){
+            if (s == array[k][l] && row_mate[l] < 0) {
+                col_mate[k] = l;
+                row_mate[l] = k;
 
-	// Begin initial state 16
-	t = 0;
-	for (l = 0; l < n; l++){
-		row_mate[l]= -1;
-		parent_row[l]= -1;
-		col_inc[l]=0;
-		slack[l]=INF;
-	}
-	for (k=0;k<m;k++)
-	{
-	s=array[k][0];
-	for (l=1;l<n;l++)
-	  if (array[k][l]<s)
-	    s=array[k][l];
-	row_dec[k]=s;
-	for (l=0;l<n;l++)
-	  if (s==array[k][l] && row_mate[l]<0)
-	  {
-	    col_mate[k]=l;
-	    row_mate[l]=k;
-	    
-	    goto row_done;
-	  }
-	col_mate[k]= -1;
-	
-	unchosen_row[t++]=k;
-	row_done:
-	;
-	}
-	// End initial state 16
+                goto
+                row_done;
+            }
+        }
+        col_mate[k] = -1;
 
-	// Begin Hungarian algorithm 18
-	if (t==0)
-	goto done;
-	unmatched=t;
-	while (1)
-	{
-		
-		q=0;
-		while (1)
-		{
-		  while (q<t)
-		  {
-		    // Begin explore node q of the forest 19
-		    {
-		      k=unchosen_row[q];
-		      s=row_dec[k];
-		      for (l=0;l<n;l++)
-		        if (slack[l])
-		        {
-		          int del;
-		          del=array[k][l]-s+col_inc[l];
-		          if (del<slack[l])
-		          {
-		            if (del==0)
-		            {
-		              if (row_mate[l]<0)
-		                goto breakthru;
-		              slack[l]=0;
-		              parent_row[l]=k;
-		              
-		              unchosen_row[t++]=row_mate[l];
-		            }
-		            else
-		            {
-		              slack[l]=del;
-		              slack_row[l]=k;
-		            }
-		        }
-		      }
-		    }
-		    // End explore node q of the forest 19
-		    q++;
-		  }
+        unchosen_row[t++] = k;
+        row_done:;
+    }
+    // End initial state
 
-		  // Begin introduce a new zero into the matrix 21
-		  s=INF;
-		  for (l=0;l<n;l++)
-		    if (slack[l] && slack[l]<s)
-		      s=slack[l];
-		  for (q=0;q<t;q++)
-		    row_dec[unchosen_row[q]]+=s;
-		  for (l=0;l<n;l++)
-		    if (slack[l])
-		    {
-		      slack[l]-=s;
-		      if (slack[l]==0)
-		      {
-		        // Begin look at a new zero 22
-		        k=slack_row[l];
-		        
-		        if (row_mate[l]<0)
-		        {
-		          for (j=l+1;j<n;j++)
-		            if (slack[j]==0)
-		              col_inc[j]+=s;
-		          goto breakthru;
-		        }
-		        else
-		        {
-		          parent_row[l]=k;
-		          
-		          unchosen_row[t++]=row_mate[l];
-		        }
-		        // End look at a new zero 22
-		      }
-		    }
-		    else
-		      col_inc[l]+=s;
-		  // End introduce a new zero into the matrix 21
-		}
-		breakthru:
-		// Begin update the matching 20
-		
-		while (1)
-		{
-		  j=col_mate[k];
-		  col_mate[k]=l;
-		  row_mate[l]=k;
-		 
-		  if (j<0)
-		    break;
-		  k=parent_row[j];
-		  l=j;
-		}
-		// End update the matching 20
-		if (--unmatched==0)
-		  goto done;
-		// Begin get ready for another stage 17
-		t=0;
-		for (l=0;l<n;l++)
-		{
-		  parent_row[l]= -1;
-		  slack[l]=INF;
-		}
-		for (k=0;k<m;k++)
-		  if (col_mate[k]<0)
-		  {
-		    unchosen_row[t++]=k;
-		  }
-	// End get ready for another stage 17
-	}
-	done:
+    // Begin Hungarian algorithm
+    if (t == 0)
+        goto
+    done;
+    unmatched = t;
+    while (1) {
 
-	// Begin doublecheck the solution 23
-	for (k=0;k<m;k++){
-		for (l=0;l<n;l++){
-			if (array[k][l]<row_dec[k]-col_inc[l]){
-				exit(0);
-			}
-		}
-	}
-	    
-	for (k=0;k<m;k++){
-		l=col_mate[k];
-		if (l<0 || array[k][l]!=row_dec[k]-col_inc[l]){
-			exit(0);
-		}
-	}
-	k=0;
-	for (l=0;l<n;l++){
-		if (col_inc[l]) {
-			k++;
-		}
-	}
-	if (k>m){
-		exit(0);
-	}
-	// End doublecheck the solution 23
-	// End Hungarian algorithm 18
+        q = 0;
+        while (1) {
+            while (q < t) {
+                // Begin explore node q of the forest
+                {
+                    k = unchosen_row[q];
+                    s = row_dec[k];
+                    for (l = 0; l < n; l++){
+                        if (slack[l]) {
+                            int
+                            del;
+                            del = array[k][l] - s + col_inc[l];
+                            if (del < slack[l]) {
+                                if (del == 0) {
+                                    if (row_mate[l] < 0)
+                                        goto
+                                    breakthru;
+                                    slack[l] = 0;
+                                    parent_row[l] = k;
 
-	for (i=0;i<m;++i)
-	{
-		results[i][col_mate[i]]=TRUE;
-	/*TRACE("%d - %d\n", i, col_mate[i]);*/
-	}
-	for (k=0;k<m;++k){
-		for (l=0;l<n;++l)
-		{
-		  /*TRACE("%d ",array[k][l]-row_dec[k]+col_inc[l]);*/
-		  array[k][l]=array[k][l]-row_dec[k]+col_inc[l];
-		}
-	/*TRACE("\n");*/
-	}
-	for (i=0;i<m;i++){
-		cost+=row_dec[i];
-	}
+                                    unchosen_row[t++] = row_mate[l];
+                                } else {
+                                    slack[l] = del;
+                                    slack_row[l] = k;
+                                }
+                            }
+                        }
+                    }
+                }
+                // End explore node q of the forest
+                q++;
+            }
 
-	for (i=0;i<n;i++){
-		cost-=col_inc[i];
-	}
+            // Begin introduce a new zero into the matrix
+            s = INF;
+            for (l = 0; l < n; l++){
+                if (slack[l] && slack[l] < s){
+                    s = slack[l];
+                }
+            }
+            for (q = 0; q < t; q++){
+                row_dec[unchosen_row[q]] += s;
+            }
+            for (l = 0; l < n; l++){
+                if (slack[l]) {
+                    slack[l] -= s;
+                    if (slack[l] == 0) {
+                        // Begin look at a new zero
+                        k = slack_row[l];
 
-	return results;
+                        if (row_mate[l] < 0) {
+                            for (j = l + 1; j < n; j++)
+                                if (slack[j] == 0)
+                                    col_inc[j] += s;
+                            goto
+                            breakthru;
+                        } else {
+                            parent_row[l] = k;
+
+                            unchosen_row[t++] = row_mate[l];
+                        }
+                        // End look at a new zero
+                    }
+                } else{
+                    col_inc[l] += s;
+                }
+            }
+            // End introduce a new zero into the matrix
+        }
+        breakthru:
+            // Begin update the matching
+
+            while (1) {
+                j = col_mate[k];
+                col_mate[k] = l;
+                row_mate[l] = k;
+
+                if (j < 0){
+                    break;
+                }
+                k = parent_row[j];
+                l = j;
+            }
+        // End update the matching
+        if (--unmatched == 0){
+            goto done;
+        }
+        
+        // Begin get ready for another stage 
+        t = 0;
+        for (l = 0; l < n; l++) {
+            parent_row[l] = -1;
+            slack[l] = INF;
+        }
+        for (k = 0; k < m; k++){
+            if (col_mate[k] < 0) {
+                unchosen_row[t++] = k;
+            }
+        }
+        // End get ready for another stage 
+    }
+    done:
+
+    // Begin doublecheck the solution
+    for (k = 0; k < m; k++) {
+        for (l = 0; l < n; l++) {
+            if (array[k][l] < row_dec[k] - col_inc[l]) {
+                exit(0);
+            }
+        }
+    }
+
+    for (k = 0; k < m; k++) {
+        l = col_mate[k];
+        if (l < 0 || array[k][l] != row_dec[k] - col_inc[l]) {
+            exit(0);
+        }
+    }
+    k = 0;
+    for (l = 0; l < n; l++) {
+        if (col_inc[l]) {
+            k++;
+        }
+    }
+    if (k > m) {
+        exit(0);
+    }
+    // End doublecheck the solution 
+    // End Hungarian algorithm 
+
+    for (i = 0; i < m; ++i) {
+        results[i][col_mate[i]] = TRUE;
+    }
+    for (k = 0; k < m; ++k) {
+        for (l = 0; l < n; ++l) {
+            
+            array[k][l] = array[k][l] - row_dec[k] + col_inc[l];
+        }
+        
+    }
+    for (i = 0; i < m; i++) {
+        cost += row_dec[i];
+    }
+
+    for (i = 0; i < n; i++) {
+        cost -= col_inc[i];
+    }
+
+    return results;
 }
 
 int findVertexById(struct Vertex *vertices, int verticesSize, int vertexId, struct Vertex **vertex) {
@@ -911,7 +914,7 @@ void removeEdgesFromVertexExceptToId(struct Vertex *vertex,int idLeft) {
 		if (vertex->edges[i].to->idLeft == idLeft) {
 			vertex->edges[0] = vertex->edges[i];
 			vertex->edgesSize = 1;
-			printf("removed");
+		
 		}
 	}
 }
@@ -924,7 +927,7 @@ void hungarianMatch(struct Graph *graph) {
 	{
 		counter += graph->frames[i].verticesSize;
 	}
-	printf("Hungarian\n");
+
 	int size = counter;
 	int **array = (int**) malloc(size *  sizeof(int*));
 	for (int i = 0; i < size; ++i)
@@ -945,15 +948,6 @@ void hungarianMatch(struct Graph *graph) {
 			}
 		}
 	}	
-	for (int i = 0; i < size; ++i)
-	{
-		for (int j = 0; j < size; ++j)
-		{
-			printf("%d\t ", array[i][j]);
-		}
-		printf("\n");
-	}
-
 
 	char **results = hungarian(array, size, size);
 	struct Vertex *vertex;
@@ -965,9 +959,9 @@ void hungarianMatch(struct Graph *graph) {
 				int idRight = i * 2;
 				int idLeft = j * 2 + 1;
 				int status = findVertexByIdInGraph(graph, idRight, &vertex);
-				removeEdgesFromVertexExceptToId(vertex, idLeft);
-				printf("Frame - %d Vertex id - %d\n",vertex->frameIndex, vertex->idLeft);
-
+				if (graph->frameSize == 4){
+					removeEdgesFromVertexExceptToId(vertex, idLeft);
+				}
 			}
 		}
 	}
@@ -1004,8 +998,8 @@ void addEdges(struct Graph *graph) {
 
 				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
 
-				int from[2] = { graph->frames[i].vertices[j].human.x, graph->frames[i].vertices[j].human.y };
-				int to[2] = { graph->frames[graph->frameSize].vertices[k].human.x, graph->frames[graph->frameSize].vertices[k].human.y };
+				int from[2] = { graph->frames[i].vertices[j].human->x, graph->frames[i].vertices[j].human->y };
+				int to[2] = { graph->frames[graph->frameSize].vertices[k].human->x, graph->frames[graph->frameSize].vertices[k].human->y };
 
 				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
 				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
@@ -1021,16 +1015,64 @@ void printPaths(struct Graph graph) {
 	if (graph.frameSize < 2) {
 		return;
 	}
-
+	printf("\n");
 	int counter = 1;
 	for (int i = 0; i < graph.frames[0].verticesSize; ++i)
 	{
 		struct Vertex *vertex = &graph.frames[0].vertices[i];
 		while(vertex->edgesSize > 0){
-			printf("Path %d - x: %d y: %d\n", counter, vertex->human.x, vertex->human.y);
+			printf("Path %d - x: %d y: %d\n", counter, vertex->human->x, vertex->human->y);
 			vertex = vertex->edges[0].to;
 		}
 		counter++;
+	}
+}
+
+char isInAnotherPath(struct Man ***paths, struct Vertex *vertex, int numberOfPaths, int *sizesOfPaths ) {
+	for (int i = 0; i < numberOfPaths; ++i)
+	{
+		for (int j = 0; j < sizesOfPaths[i]; ++j)
+		{
+			if (paths[i][j]->intensity == vertex->human->intensity) {
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
+
+void evaluateInsAndOuts(struct Graph *graph) {
+	struct Man ***paths = (struct Man***) malloc(MAX_PEOPLE * sizeof(struct Man**));
+	for (int i = 0; i < MAX_PEOPLE; ++i)
+	{
+		paths[i] = (struct Man**) malloc(MAX_PEOPLE * sizeof(struct Man*));
+		
+	}
+	int counterPaths = 0;
+	int counters[MAX_PEOPLE]; 
+	memset(counters, 0, MAX_PEOPLE * sizeof(int));
+	char newPath = FALSE;
+	for (int i = 0; i < graph->frameSize; ++i)
+	{
+		for (int j = 0; j < graph->frames[i].verticesSize; ++j)
+		{
+			struct Vertex *vertex = &graph->frames[i].vertices[j];
+			while(vertex->edgesSize > 0){
+				if(!isInAnotherPath(paths, vertex, counterPaths, counters)){
+					printf("Path %d - x: %d y: %d\n", counters[counterPaths], vertex->human->x, vertex->human->y);
+					paths[counterPaths][counters[counterPaths]] = vertex->human;
+					counters[counterPaths]++;
+					newPath = TRUE;
+					vertex = vertex->edges[0].to;
+				}else {
+					break;
+				}
+				
+			}
+			if (newPath) {
+				counterPaths++;
+			}
+		}
 	}
 }
 
@@ -1045,6 +1087,9 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		if (index == -1) {
 			continue;
 		}
+		if (images[index].time > 5) {
+			break;
+		}
 		
 		struct Frame *frame = &graph.frames[graph.frameSize];
 		frame->verticesSize = 0;
@@ -1052,8 +1097,9 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		for (int j = 0; j < images[index].size; ++j){
 			frame->vertices[frame->verticesSize].idRight = idCounter++;
 			frame->vertices[frame->verticesSize].idLeft = idCounter++;
-			frame->vertices[frame->verticesSize].human = people[j];
+			frame->vertices[frame->verticesSize].human = &people[j];
 			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(MAX_PEOPLE_2 * sizeof(struct Edge));
+			memset(frame->vertices[frame->verticesSize].edges, 0, MAX_PEOPLE_2 * sizeof(struct Edge));
 			frame->vertices[frame->verticesSize].edgesSize = 0;
 			frame->vertices[frame->verticesSize].frameIndex = graph.frameSize;
 			frame->verticesSize++;
@@ -1064,6 +1110,9 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		printPaths(graph);
 		graph.frameSize++;
 	}
+
+	evaluateInsAndOuts(&graph);
+
 	
 	for (int i = 0; i < graph.frameSize; ++i)
 	{
@@ -1076,20 +1125,18 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 struct Image* initImages() {
 	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
 	image[0].size = 2;
-	image[0].people[0].x = 4;
+	image[0].people[0].x = 5;
 	image[0].people[0].y = 4;
-	image[0].people[1].x = 26;
-	image[0].people[1].y = 21;
 	
 	image[1].size = 2;
-	image[1].people[0].x = 4;
-	image[1].people[0].y = 8;
+	image[1].people[0].x = 5;
+	image[1].people[0].y = 5;
 	image[1].people[1].x = 24;
 	image[1].people[1].y = 15;
 
 	image[2].size = 2;
-	image[2].people[0].x = 6;
-	image[2].people[0].y = 10;
+	image[2].people[0].x = 20;
+	image[2].people[0].y = 20;
 	image[2].people[1].x = 23;
 	image[2].people[1].y = 12;
 
@@ -1104,13 +1151,14 @@ struct Image* initImages() {
 	image[4].people[0].y = 20;
 	image[4].people[1].x = 21;
 	image[4].people[1].y = 4;
+
 	return image;
 }
 
 int main ( void )
 {
 	
-	static const char filename[] = "tmp";
+	static const char filename[] = "in-gaussian-sideways";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
@@ -1161,61 +1209,61 @@ int main ( void )
 	int in = 0, out = 0;
 	long currentImage = 0;
 
-	while ((read = getline(&line, &len, file)) != -1) {
-		trainingCycles++;
+	// while ((read = getline(&line, &len, file)) != -1) {
+	// 	trainingCycles++;
 		
 		
-		char *numberStrings[768];
-		memset(numberStrings, 0, 768);
-		int i = 0;
-		char *p = strtok( line, ",");
-		while (p != NULL) {
-			numberStrings[i++] = p;
-			p = strtok(NULL, ",");
-		}
-		for (int i = 0; i < 768; ++i)
-		{
-			numbers[i] = strtof(numberStrings[i], NULL);
-		}
+	// 	char *numberStrings[768];
+	// 	memset(numberStrings, 0, 768);
+	// 	int i = 0;
+	// 	char *p = strtok( line, ",");
+	// 	while (p != NULL) {
+	// 		numberStrings[i++] = p;
+	// 		p = strtok(NULL, ",");
+	// 	}
+	// 	for (int i = 0; i < 768; ++i)
+	// 	{
+	// 		numbers[i] = strtof(numberStrings[i], NULL);
+	// 	}
 
-		float gaussians[768];
-		memcpy(gaussians, numbers, sizeof(gaussians));
-		// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
-		// printFloatMatrix(normalizeFile, gaussians, 32, 24);
+	// 	float gaussians[768];
+	// 	memcpy(gaussians, numbers, sizeof(gaussians));
+	// 	// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
+	// 	// printFloatMatrix(normalizeFile, gaussians, 32, 24);
 
-		calculateHistogram(gaussians, 768, &min, &max);
-		float threshold = findThreshold(gaussians, 768, (max - min) / 10);
+	// 	calculateHistogram(gaussians, 768, &min, &max);
+	// 	float threshold = findThreshold(gaussians, 768, (max - min) / 10);
 		
-		setThreshold(gaussians, 768, threshold);
-		imagesIndex = getIndexForImages(imagesIndex);
-		peopleSize = images[imagesIndex].size = 0;
-		int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
-		images[imagesIndex].size = peopleSize;
-		images[imagesIndex].time = currentImage;
+	// 	setThreshold(gaussians, 768, threshold);
+	// 	imagesIndex = getIndexForImages(imagesIndex);
+	// 	peopleSize = images[imagesIndex].size = 0;
+	// 	int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
+	// 	images[imagesIndex].size = peopleSize;
+	// 	images[imagesIndex].time = currentImage;
 		
 
-		printIntMatrix(outputfile, detected, 32, 24);
+	// 	printIntMatrix(outputfile, detected, 32, 24);
 		
-		// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
-		struct Man *people = images[imagesIndex].people;
-		printf("Image n. %d\n", imagesIndex);
-		for (int i = 0; i < images[imagesIndex].size; ++i)
-		{
-			printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
-		}
-		struct Image *imageTest = initImages();
-		if (imagesIndex == 4) {
-			detectDirection(imageTest, imagesIndex, &in, &out);
-		}	
+	// 	// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
+	// 	struct Man *people = images[imagesIndex].people;
+	// 	printf("Image n. %d\n", imagesIndex);
+	// 	for (int i = 0; i < images[imagesIndex].size; ++i)
+	// 	{
+	// 		printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
+	// 	}
 		
-		// printf("In - %d, Out - %d \n", in, out);
+	// 	if (imagesIndex == 4) {
+	// 		detectDirection(images, imagesIndex, &in, &out);
+	// 	}	
+		
+	// 	// printf("In - %d, Out - %d \n", in, out);
 
-		imagesIndex++;
-		currentImage++;
-	}
-	// struct Image *imageTest = initImages();
+	// 	imagesIndex++;
+	// 	currentImage++;
+	// }
+	struct Image *imageTest = initImages();
 		
-	// detectDirection(imageTest, 4, &in, &out);
+	detectDirection(imageTest, 4, &in, &out);
 		
 	fclose ( outputfile );
 	fclose ( normalizeFile );
