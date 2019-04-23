@@ -24,7 +24,7 @@ struct Man
     int height;
     int space;
     float intensity;
-    short alreadyCounted;
+    char alreadyCounted;
 };
 
 struct Image {
@@ -633,45 +633,36 @@ int* subtract2dVector(int *array1, int *array2, int size) {
 
 char** hungarian(int **array, int width, int height)
 {
-    char **results = (char **)
-    malloc(height * sizeof(char *));
+    char **results = (char **) malloc(height * sizeof(char *));
     for (int i = 0; i < height; ++i){
-        results[i] = (char *)
-        malloc(width * sizeof(char));
+        results[i] = (char *) malloc(width * sizeof(char));
     }
     int i, j;
     unsigned int m = height, n = width;
     int k;
     int l;
     int s;
-    int *col_mate = (int *)
-    malloc(height * sizeof(int));
+    int *col_mate = (int *)malloc(height * sizeof(int));
     col_mate[0] = 0;
-    int *row_mate = (int *)
-    malloc(width * sizeof(int));
+    int *row_mate = (int *) malloc(width * sizeof(int));
     row_mate[0] = 0;
-    int *parent_row = (int *)
-    malloc(width * sizeof(int));
+    int *parent_row = (int *) malloc(width * sizeof(int));
     parent_row[0] = 0;
-    int *unchosen_row = (int *)
-    malloc(height * sizeof(int));
+    int *unchosen_row = (int *) malloc(height * sizeof(int));
     unchosen_row[0] = 0;
     int t;
     int q;
-    int *row_dec = (int *)
-    malloc(height * sizeof(int));
+    int *row_dec = (int *) malloc(height * sizeof(int));
     row_dec[0] = 0;
-    int *col_inc = (int *)
-    malloc(width * sizeof(int));
+    int *col_inc = (int *) malloc(width * sizeof(int));
     col_inc[0] = 0;
-    int *slack = (int *)
-    malloc(width * sizeof(int));
+    int *slack = (int *) malloc(width * sizeof(int));
     slack[0] = 0;
-    int *slack_row = (int *)
-    malloc(width * sizeof(int));
+    int *slack_row = (int *) malloc(width * sizeof(int));
     slack_row[0] = 0;
     int unmatched;
     int cost = 0;
+	int counter = 0;
 
     for (i = 0; i < height; ++i)
         for (j = 0; j < width; ++j)
@@ -799,19 +790,20 @@ char** hungarian(int **array, int width, int height)
             // End introduce a new zero into the matrix
         }
         breakthru:
-            // Begin update the matching
-
-            while (1) {
-                j = col_mate[k];
-                col_mate[k] = l;
-                row_mate[l] = k;
-
-                if (j < 0){
-                    break;
-                }
-                k = parent_row[j];
-                l = j;
-            }
+        // Begin update the matching
+        
+		while (1){
+			j = col_mate[k];
+			col_mate[k] = l;
+			row_mate[l] = k;
+			if ( j < 0 )
+				break;
+			k = parent_row[j];
+			l = j;
+			if (counter > 50)
+				break;
+			counter++;
+		}
         // End update the matching
         if (--unmatched == 0){
             goto done;
@@ -876,6 +868,15 @@ char** hungarian(int **array, int width, int height)
     for (i = 0; i < n; i++) {
         cost -= col_inc[i];
     }
+
+    free(col_mate);
+	free(row_mate);
+	free(parent_row);
+	free(unchosen_row);
+	free(row_dec);
+	free(col_inc);
+	free(slack);
+	free(slack_row);
 
     return results;
 }
@@ -965,8 +966,13 @@ void hungarianMatch(struct Graph *graph) {
 			}
 		}
 	}
-	    
-	      
+
+	free(results);
+	for (int i = 0; i < size; ++i)
+	{
+		free(array[i]);
+	}
+	free(array);
 }
 
 void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
@@ -975,7 +981,7 @@ void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
 	}
 }
 
-const float alpha = 0.1;
+const float alpha = 0.5;
 
 // Go through all frames and add edges to last frame vertices. 
 // If the vertex is terminal it is extension edge, if the vertex is not terminal it is correction edge.
@@ -1033,21 +1039,63 @@ char isInAnotherPath(struct Man ***paths, struct Vertex *vertex, int numberOfPat
 	{
 		for (int j = 0; j < sizesOfPaths[i]; ++j)
 		{
-			if (paths[i][j]->intensity == vertex->human->intensity) {
+			if (paths[i][j]->intensity == vertex->human->intensity && paths[i][j]->x == vertex->human->x && paths[i][j]->y == vertex->human->y) {
 				return TRUE;
 			}
 		}
 	}
 	return FALSE;
 }
+/*
+n = number of data points
+path = data points in Man struct
+*b = output intercept
+*m  = output slope
+*r = output correlation coefficient (can be NULL if you don't want it)
+*/
+int linreg(int n, struct Man **path, float* m, float* b, float* r){
+    float sumx = 0.0;                      /* sum of x     */
+    float sumx2 = 0.0;                     /* sum of x**2  */
+    float sumxy = 0.0;                     /* sum of x * y */
+    float sumy = 0.0;                      /* sum of y     */
+    float sumy2 = 0.0;                     /* sum of y**2  */
 
-void evaluateInsAndOuts(struct Graph *graph) {
+    for (int i = 0; i < n; i++){ 
+        sumx  += i;       
+        sumx2 += sqrt(i);  
+        sumxy += i * path[i]->y;
+        sumy  += path[i]->y;      
+        sumy2 += sqrt(path[i]->y); 
+    } 
+
+    float denom = (n * sumx2 - sqrt(sumx));
+    if (denom == 0) {
+        // singular matrix. can't solve the problem.
+        *m = 0;
+        *b = 0;
+        if (r) *r = 0;
+            return 1;
+    }
+
+    *m = (n * sumxy  -  sumx * sumy) / denom;
+    *b = (sumy * sumx2  -  sumx * sumxy) / denom;
+    if (r != NULL) {
+        *r = (sumxy - sumx * sumy / n) /    /* compute correlation coeff */
+              sqrt((sumx2 - sqrt(sumx)/n) *
+              (sumy2 - sqrt(sumy)/n));
+    }
+
+    return 0; 
+}
+
+void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 	struct Man ***paths = (struct Man***) malloc(MAX_PEOPLE * sizeof(struct Man**));
 	for (int i = 0; i < MAX_PEOPLE; ++i)
 	{
 		paths[i] = (struct Man**) malloc(MAX_PEOPLE * sizeof(struct Man*));
 		
 	}
+	
 	int counterPaths = 0;
 	int counters[MAX_PEOPLE]; 
 	memset(counters, 0, MAX_PEOPLE * sizeof(int));
@@ -1059,21 +1107,58 @@ void evaluateInsAndOuts(struct Graph *graph) {
 			struct Vertex *vertex = &graph->frames[i].vertices[j];
 			while(vertex->edgesSize > 0){
 				if(!isInAnotherPath(paths, vertex, counterPaths, counters)){
-					printf("Path %d - x: %d y: %d\n", counters[counterPaths], vertex->human->x, vertex->human->y);
 					paths[counterPaths][counters[counterPaths]] = vertex->human;
 					counters[counterPaths]++;
 					newPath = TRUE;
 					vertex = vertex->edges[0].to;
 				}else {
 					break;
-				}
-				
+				}	
 			}
 			if (newPath) {
 				counterPaths++;
+				newPath = FALSE;
 			}
 		}
 	}
+	float m, b, r;
+	char alreadyCounted;
+	for (int i = 0; i < counterPaths; ++i)
+	{
+		alreadyCounted = FALSE;
+		if (counters[i] <= 3) {
+			continue;
+		}
+
+		for (int j = 0; j < counters[i]; ++j)
+		{
+			if (paths[i][j]->alreadyCounted) {
+				alreadyCounted = TRUE;
+				break;
+			}			
+		}
+
+		if (alreadyCounted){
+			continue;
+		}
+
+		linreg(counters[i], paths[i], &m, &b,&r);
+		
+		if (m > 5) {
+			*in = *in + 1;
+		}
+
+		if (m < -5) {
+			*out = *out + 1;
+		}
+		
+		for (int j = 0; j < counters[i]; ++j)
+		{
+			paths[i][j]->alreadyCounted = TRUE;
+		}
+	}
+    
+
 }
 
 void detectDirection(struct Image *images, int currentImage, int *in, int *out) {
@@ -1082,19 +1167,25 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 	struct Graph graph;
 	graph.frameSize = 0;
 	int idCounter = 0;
+	
+
 	for (int i = currentImage; i >= currentImage - IMAGE_NUM; --i){
 		int index = getIndexForImages(i);
+
 		if (index == -1) {
 			continue;
 		}
-		if (images[index].time > 5) {
-			break;
-		}
+		// if (images[index].time > 5) {
+		// 	break;
+		// }
 		
 		struct Frame *frame = &graph.frames[graph.frameSize];
 		frame->verticesSize = 0;
 		struct Man *people = images[index].people;
 		for (int j = 0; j < images[index].size; ++j){
+			if (people[j].alreadyCounted) {
+				continue;
+			}
 			frame->vertices[frame->verticesSize].idRight = idCounter++;
 			frame->vertices[frame->verticesSize].idLeft = idCounter++;
 			frame->vertices[frame->verticesSize].human = &people[j];
@@ -1104,14 +1195,14 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 			frame->vertices[frame->verticesSize].frameIndex = graph.frameSize;
 			frame->verticesSize++;
 		}
-
+		
 		addEdges(&graph);
 		calculateVertexDisjointMaximumWeightPathCover(&graph);
 		printPaths(graph);
 		graph.frameSize++;
 	}
 
-	evaluateInsAndOuts(&graph);
+	evaluateInsAndOuts(&graph, in, out);
 
 	
 	for (int i = 0; i < graph.frameSize; ++i)
@@ -1125,32 +1216,45 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 struct Image* initImages() {
 	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
 	image[0].size = 2;
-	image[0].people[0].x = 5;
-	image[0].people[0].y = 4;
+	image[4].people[0].x = 20;
+	image[4].people[0].y = 20;
+	image[0].people[1].x = 21;
+	image[0].people[1].y = 19;
+
+	image[0].people[0].alreadyCounted = 0;
+	image[0].people[1].alreadyCounted = 0;
+	image[1].people[0].alreadyCounted = 0;
+	image[1].people[1].alreadyCounted = 0;
+	image[2].people[0].alreadyCounted = 0;
+	image[2].people[1].alreadyCounted = 0;
+	image[3].people[0].alreadyCounted = 0;
+	image[3].people[1].alreadyCounted = 0;
+	image[4].people[0].alreadyCounted = 0;
+	image[4].people[1].alreadyCounted = 0;
 	
 	image[1].size = 2;
-	image[1].people[0].x = 5;
-	image[1].people[0].y = 5;
-	image[1].people[1].x = 24;
-	image[1].people[1].y = 15;
+	image[3].people[0].x = 18;
+	image[3].people[0].y = 18;
+	image[1].people[1].x = 15;
+	image[1].people[1].y = 14;
 
 	image[2].size = 2;
-	image[2].people[0].x = 20;
-	image[2].people[0].y = 20;
-	image[2].people[1].x = 23;
-	image[2].people[1].y = 12;
+	image[2].people[0].x = 12;
+	image[2].people[0].y = 12;
+	image[2].people[1].x = 14;
+	image[2].people[1].y = 10;
 
 	image[3].size = 2;
-	image[3].people[0].x = 8;
-	image[3].people[0].y = 15;
-	image[3].people[1].x = 22;
-	image[3].people[1].y = 8;
+	image[1].people[0].x = 8;
+	image[1].people[0].y = 8;
+	image[3].people[1].x = 5;
+	image[3].people[1].y = 5;
 	
 	image[4].size = 2;
-	image[4].people[0].x = 7;
-	image[4].people[0].y = 20;
-	image[4].people[1].x = 21;
-	image[4].people[1].y = 4;
+	image[0].people[0].x = 7;
+	image[0].people[0].y = 3;
+	image[4].people[1].x = 1;
+	image[4].people[1].y = 1;
 
 	return image;
 }
@@ -1203,67 +1307,67 @@ int main ( void )
 	int trainingCycles = 0;
 
 	float maxOfBackground = -99999999999;
-	ssize_t read;
+	
 	char *line = NULL;
 	size_t len = 0;
 	int in = 0, out = 0;
 	long currentImage = 0;
 
-	// while ((read = getline(&line, &len, file)) != -1) {
-	// 	trainingCycles++;
+	while ((read = getline(&line, &len, file)) != -1) {
+		trainingCycles++;
 		
 		
-	// 	char *numberStrings[768];
-	// 	memset(numberStrings, 0, 768);
-	// 	int i = 0;
-	// 	char *p = strtok( line, ",");
-	// 	while (p != NULL) {
-	// 		numberStrings[i++] = p;
-	// 		p = strtok(NULL, ",");
-	// 	}
-	// 	for (int i = 0; i < 768; ++i)
-	// 	{
-	// 		numbers[i] = strtof(numberStrings[i], NULL);
-	// 	}
+		char *numberStrings[768];
+		memset(numberStrings, 0, 768);
+		int i = 0;
+		char *p = strtok( line, ",");
+		while (p != NULL) {
+			numberStrings[i++] = p;
+			p = strtok(NULL, ",");
+		}
+		for (int i = 0; i < 768; ++i)
+		{
+			numbers[i] = strtof(numberStrings[i], NULL);
+		}
 
-	// 	float gaussians[768];
-	// 	memcpy(gaussians, numbers, sizeof(gaussians));
-	// 	// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
-	// 	// printFloatMatrix(normalizeFile, gaussians, 32, 24);
+		float gaussians[768];
+		memcpy(gaussians, numbers, sizeof(gaussians));
+		// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
+		// printFloatMatrix(normalizeFile, gaussians, 32, 24);
 
-	// 	calculateHistogram(gaussians, 768, &min, &max);
-	// 	float threshold = findThreshold(gaussians, 768, (max - min) / 10);
+		calculateHistogram(gaussians, 768, &min, &max);
+		float threshold = findThreshold(gaussians, 768, (max - min) / 10);
 		
-	// 	setThreshold(gaussians, 768, threshold);
-	// 	imagesIndex = getIndexForImages(imagesIndex);
-	// 	peopleSize = images[imagesIndex].size = 0;
-	// 	int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
-	// 	images[imagesIndex].size = peopleSize;
-	// 	images[imagesIndex].time = currentImage;
+		setThreshold(gaussians, 768, threshold);
+		imagesIndex = getIndexForImages(imagesIndex);
+		peopleSize = images[imagesIndex].size = 0;
+		int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
+		images[imagesIndex].size = peopleSize;
+		images[imagesIndex].time = currentImage;
 		
 
-	// 	printIntMatrix(outputfile, detected, 32, 24);
+		printIntMatrix(outputfile, detected, 32, 24);
 		
-	// 	// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
-	// 	struct Man *people = images[imagesIndex].people;
-	// 	printf("Image n. %d\n", imagesIndex);
-	// 	for (int i = 0; i < images[imagesIndex].size; ++i)
-	// 	{
-	// 		printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
-	// 	}
+		// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
+		// struct Man *people = images[imagesIndex].people;
+		// printf("Image n. %d\n", imagesIndex);
+		// for (int i = 0; i < images[imagesIndex].size; ++i)
+		// {
+		// 	printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
+		// }
 		
-	// 	if (imagesIndex == 4) {
-	// 		detectDirection(images, imagesIndex, &in, &out);
-	// 	}	
 		
-	// 	// printf("In - %d, Out - %d \n", in, out);
+		detectDirection(images, imagesIndex, &in, &out);
+		
+		
+		printf("In - %d, Out - %d \n", in, out);
 
-	// 	imagesIndex++;
-	// 	currentImage++;
-	// }
-	struct Image *imageTest = initImages();
+		imagesIndex++;
+		currentImage++;
+	}
+	// struct Image *imageTest = initImages();
 		
-	detectDirection(imageTest, 4, &in, &out);
+	// detectDirection(imageTest, 4, &in, &out);
 		
 	fclose ( outputfile );
 	fclose ( normalizeFile );
