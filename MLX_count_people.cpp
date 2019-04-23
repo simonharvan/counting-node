@@ -57,7 +57,6 @@ struct Vertex {
 struct Edge {
 	float weight;
 	struct Vertex *to;
-	short correctionEdge;
 };
 
 struct Frame {
@@ -525,7 +524,7 @@ float getStdDev(float *src, int size) {
 	return sqrt(standardDeviation/size);
 }
 
-char isInAnotherPath(struct Man ***paths, struct Vertex *vertex, int numberOfPaths, int *sizesOfPaths ) {
+char isInAnotherPath(struct Man *paths[][MAX_PEOPLE], struct Vertex *vertex, int numberOfPaths, int *sizesOfPaths ) {
 	for (int i = 0; i < numberOfPaths; ++i)
 	{
 		for (int j = 0; j < sizesOfPaths[i]; ++j)
@@ -578,14 +577,9 @@ int linreg(int n, struct Man **path, float* m, float* b, float* r){
 
     return 0; 
 }
+struct Man *paths[MAX_PEOPLE][MAX_PEOPLE];
 
 void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
-	struct Man ***paths = (struct Man***) malloc(MAX_PEOPLE * sizeof(struct Man**));
-	for (int i = 0; i < MAX_PEOPLE; ++i)
-	{
-		paths[i] = (struct Man**) malloc(MAX_PEOPLE * sizeof(struct Man*));
-		
-	}
 	
 	int counterPaths = 0;
 	int counters[MAX_PEOPLE]; 
@@ -617,7 +611,8 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 	for (int i = 0; i < counterPaths; ++i)
 	{
 		alreadyCounted = FALSE;
-		if (counters[i] <= 3) {
+		if (counters[i] < 3) {
+			Serial.println("Not enough images");
 			continue;
 		}
 
@@ -630,16 +625,18 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 		}
 
 		if (alreadyCounted){
+			Serial.println("Already counted");
 			continue;
 		}
 
 		linreg(counters[i], paths[i], &m, &b,&r);
-		
-		if (m > 5) {
+		Serial.print("Output slope: ");
+		Serial.println(m);
+		if (m > 1) {
 			*in = *in + 1;
 		}
 
-		if (m < -5) {
+		if (m < -1) {
 			*out = *out + 1;
 		}
 		
@@ -648,14 +645,14 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 			paths[i][j]->alreadyCounted = TRUE;
 		}
 	}
-    
-
 }
+
+struct Graph graph;
 
 void detectDirection(struct Image *images, int currentImage, int *in, int *out) {
 	int previousSize = 0;
 	
-	struct Graph graph;
+	
 	graph.frameSize = 0;
 	int idCounter = 0;
 	
@@ -666,9 +663,12 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		if (index == -1) {
 			continue;
 		}
-		// if (images[index].time > 5) {
-		// 	break;
-		// }
+		if (images[index].time < millis() - 1500) {
+			break;
+		}
+		if (graph.frameSize > 5) {
+			break;
+		}
 		
 		struct Frame *frame = &graph.frames[graph.frameSize];
 		frame->verticesSize = 0;
@@ -680,8 +680,8 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 			frame->vertices[frame->verticesSize].idRight = idCounter++;
 			frame->vertices[frame->verticesSize].idLeft = idCounter++;
 			frame->vertices[frame->verticesSize].human = &people[j];
-			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(MAX_PEOPLE_2 * sizeof(struct Edge));
-			memset(frame->vertices[frame->verticesSize].edges, 0, MAX_PEOPLE_2 * sizeof(struct Edge));
+			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(MAX_PEOPLE * sizeof(struct Edge));
+			// memset(frame->vertices[frame->verticesSize].edges, 0, MAX_PEOPLE_2 * sizeof(struct Edge));
 			frame->vertices[frame->verticesSize].edgesSize = 0;
 			frame->vertices[frame->verticesSize].frameIndex = graph.frameSize;
 			frame->verticesSize++;
@@ -729,6 +729,14 @@ int* subtract2dVector(int *array1, int *array2, int size) {
 	}
 	return result;
 }
+int col_mate[MAX_PEOPLE_2];
+int row_mate[MAX_PEOPLE_2];
+int parent_row[MAX_PEOPLE_2];
+int unchosen_row[MAX_PEOPLE_2];
+int row_dec[MAX_PEOPLE_2];
+int col_inc[MAX_PEOPLE_2];
+int slack[MAX_PEOPLE_2];
+int slack_row[MAX_PEOPLE_2];
 
 char** hungarian(int **array, int width, int height)
 {
@@ -741,23 +749,15 @@ char** hungarian(int **array, int width, int height)
     int k;
     int l;
     int s;
-    int *col_mate = (int *)malloc(height * sizeof(int));
     col_mate[0] = 0;
-    int *row_mate = (int *) malloc(width * sizeof(int));
     row_mate[0] = 0;
-    int *parent_row = (int *) malloc(width * sizeof(int));
     parent_row[0] = 0;
-    int *unchosen_row = (int *) malloc(height * sizeof(int));
     unchosen_row[0] = 0;
     int t;
     int q;
-    int *row_dec = (int *) malloc(height * sizeof(int));
     row_dec[0] = 0;
-    int *col_inc = (int *) malloc(width * sizeof(int));
     col_inc[0] = 0;
-    int *slack = (int *) malloc(width * sizeof(int));
     slack[0] = 0;
-    int *slack_row = (int *) malloc(width * sizeof(int));
     slack_row[0] = 0;
     int unmatched;
     int cost = 0;
@@ -968,15 +968,6 @@ char** hungarian(int **array, int width, int height)
         cost -= col_inc[i];
     }
 
-    free(col_mate);
-	free(row_mate);
-	free(parent_row);
-	free(unchosen_row);
-	free(row_dec);
-	free(col_inc);
-	free(slack);
-	free(slack_row);
-
     return results;
 }
 
@@ -1083,12 +1074,13 @@ void hungarianMatch(struct Graph *graph) {
 			}
 		}
 	}
-
-	free(results);
+	
 	for (int i = 0; i < size; ++i)
 	{
+		free(results[i]);
 		free(array[i]);
 	}
+	free(results);
 	free(array);
 }
 
@@ -1105,6 +1097,8 @@ const float alpha = 0.5;
 // If the vertex is terminal it is extension edge, if the vertex is not terminal it is correction edge.
 void addEdges(struct Graph *graph) {
 	int edgesSize;
+	int from[2];
+	int to[2];
 	if (graph->frameSize < 1 ) {
 		return;
 	}
@@ -1120,14 +1114,17 @@ void addEdges(struct Graph *graph) {
 				edgesSize = graph->frames[i].vertices[j].edgesSize;
 				graph->frames[i].vertices[j].edges[edgesSize].to = &graph->frames[graph->frameSize].vertices[k];
 
-				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
+				from[0] = graph->frames[i].vertices[j].human->x;
+				from[1] = graph->frames[i].vertices[j].human->y;
+				to[0] = graph->frames[graph->frameSize].vertices[k].human->x;
+				to[1] = graph->frames[graph->frameSize].vertices[k].human->y;
 
-				int from[2] = { graph->frames[i].vertices[j].human->x, graph->frames[i].vertices[j].human->y };
-				int to[2] = { graph->frames[graph->frameSize].vertices[k].human->x, graph->frames[graph->frameSize].vertices[k].human->y };
+				int *subtracted = subtract2dVector(from, to, 2);
 
 				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
-				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
-				
+				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)));
+
+				free(subtracted);
 				graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
 				graph->frames[i].vertices[j].edgesSize++;
 			}

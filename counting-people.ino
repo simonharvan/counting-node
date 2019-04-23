@@ -71,14 +71,14 @@ int trainingCycles = 0;
 float maxOfBackground = -99999999999;
 float minValue = 0, maxValue = 0;
 
-static Man people[10];
-static int peopleSize = 0;
+
+
 
 ESP8266WiFiMulti WiFiMulti;
 
 static struct Image images[IMAGE_NUM];
+static int peopleSize = 0;
 static int imagesIndex = 0; 
-static long currentImage = 0;
 static int in = 0, out = 0;
 static float gaussians[768];
 
@@ -160,8 +160,8 @@ int mode;
 int status;
 long startTime;
 long stopTime;
-// float stdevs[AVG_TRAINING];
-// long stdevsCounter = 0;
+float stdevs[300];
+int stdevsCounter = 0;
 
 void loop()
 {
@@ -199,26 +199,25 @@ void loop()
     MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
 	
 	
-	stopTime = millis();
 	
-	Serial.print("Read rate: ");
+	
+	doSomethingWithResult();
+	stopTime = millis();
+	Serial.print("Loop time: ");
 	Serial.print(stopTime - startTime);
 	Serial.println(" ms");
-
-	doSomethingWithResult();
 }
+
 
 void doSomethingWithResult() {
 	float *numbers;
-	startTime = millis();
+	int tmpIn;
+	int tmpOut;
 	if (trainingCycles > AVG_TRAINING) {
 		numbers = applyGaussian(mlx90640To, 32, 24);
-		memcpy(numbers, gaussians, sizeof(gaussians));
-		Serial.println("HERE");
+		
 		float stdDev = getStdDev(numbers, 768);
 		if (stdDev > maxOfBackground) {
-			Serial.println("HERE 2");
-			printArray(numbers, 768);
 			findMinMax(numbers, 768, &minValue, &maxValue);
 			
 			float threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
@@ -227,23 +226,28 @@ void doSomethingWithResult() {
 			
 			imagesIndex = getIndexForImages(imagesIndex);
 			peopleSize = images[imagesIndex].size = 0;
-			int *detected = detectPeople(numbers, gaussians, 32, 24, images[imagesIndex].people, &peopleSize);
+			int *detected = detectPeople(numbers, mlx90640To, 32, 24, images[imagesIndex].people, &peopleSize);
 			images[imagesIndex].size = peopleSize;
 			images[imagesIndex].time = millis();
 
+			
+			for (int i = 0; i < peopleSize; ++i){
+				printf("Man detected at x - %d, y - %d\n",  images[imagesIndex].people[i].x, images[imagesIndex].people[i].y);
+			}
+			tmpIn = in;
+			tmpOut = out;
 			detectDirection(images, imagesIndex, &in, &out);
 		
 		
 			printf("In - %d, Out - %d \n", in, out);
 
 			imagesIndex++;
-			currentImage++;
-			
-			
-			for (int i = 0; i < peopleSize; ++i){
-				printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
+			if (in != tmpIn || out = tmpOut) {
+				char str[20];
+				sprintf(str, "in: %d, out: %d", in, out);
+				sendData(str);
 			}
-			peopleSize = 0;
+
 		}
 	}else {
 		trainingCycles++;
@@ -254,15 +258,17 @@ void doSomethingWithResult() {
 		
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		float stdDev = getStdDev(numbers, 768);
-		Serial.println(stdDev);
-		if (stdDev > maxOfBackground){
-			maxOfBackground = stdDev;
+		stdevs[stdevsCounter] = stdDev;
+		stdevsCounter++;
+		if (stdevsCounter > 3) {
+			stdDev = (stdevs[stdevsCounter - 1] + stdevs[stdevsCounter - 2] + stdevs[stdevsCounter - 3]) / 3;
+			Serial.println(stdDev);
+			if (stdDev > maxOfBackground){
+				maxOfBackground = stdDev;
+			}
 		}
+		
 	}
-	stopTime = millis();
-	Serial.print("Process rate: ");
-	Serial.print(stopTime - startTime);
-	Serial.println(" ms");
 	free(numbers);
 
 }
@@ -313,6 +319,7 @@ void sendData(char* text) {
 			
 			// start connection and send HTTP header
 			int httpCode = http.POST(cJSON_Print(root));
+			Serial.println(cJSON_Print(root));
 
 			// httpCode will be negative on error
 			if (httpCode > 0) {
