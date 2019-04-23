@@ -435,8 +435,8 @@ void getObjectsProperties(int *src, float *intensities, int width, int height, i
 					maxY = i;
 				}
 				
-				*x = *x + i;
-				*y = *y + j;
+				*x = *x + j;
+				*y = *y + i;
 				*intensity = *intensity + intensities[i * width + j];
 				volume++;
 			}

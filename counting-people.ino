@@ -76,6 +76,12 @@ static int peopleSize = 0;
 
 ESP8266WiFiMulti WiFiMulti;
 
+static struct Image images[IMAGE_NUM];
+static int imagesIndex = 0; 
+static long currentImage = 0;
+static int in = 0, out = 0;
+static float gaussians[768];
+
 void doSomethingWithResult(float *numbers);
 void sendData(char* text);
 boolean isConnected();
@@ -207,20 +213,32 @@ void doSomethingWithResult() {
 	startTime = millis();
 	if (trainingCycles > AVG_TRAINING) {
 		numbers = applyGaussian(mlx90640To, 32, 24);
+		memcpy(numbers, gaussians, sizeof(gaussians));
+		Serial.println("HERE");
 		float stdDev = getStdDev(numbers, 768);
 		if (stdDev > maxOfBackground) {
-			
+			Serial.println("HERE 2");
+			printArray(numbers, 768);
 			findMinMax(numbers, 768, &minValue, &maxValue);
 			
 			float threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
 			
 			numbers = setThreshold(numbers, 768, threshold);
 			
-			int* objects = detectPeople(numbers, 32, 24, people, &peopleSize);
+			imagesIndex = getIndexForImages(imagesIndex);
+			peopleSize = images[imagesIndex].size = 0;
+			int *detected = detectPeople(numbers, gaussians, 32, 24, images[imagesIndex].people, &peopleSize);
+			images[imagesIndex].size = peopleSize;
+			images[imagesIndex].time = millis();
+
+			detectDirection(images, imagesIndex, &in, &out);
+		
+		
+			printf("In - %d, Out - %d \n", in, out);
+
+			imagesIndex++;
+			currentImage++;
 			
-			printIntArray(objects, 768);
-			
-			stopTime = millis();
 			
 			for (int i = 0; i < peopleSize; ++i){
 				printf("Man detected at x - %d, y - %d\n", people[i].x, people[i].y);
@@ -230,14 +248,12 @@ void doSomethingWithResult() {
 	}else {
 		trainingCycles++;
 		if (trainingCycles < 5) {
+			free(numbers);
 			return;
 		}
 		
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		float stdDev = getStdDev(numbers, 768);
-		// if (stdevsCounter >= 3) {
-			// stdevs[stdevsCounter++] = stdDev;
-			// // stdDev = (stdevs[stdevsCounter - 2] + stdevs[stdevsCounter - 1] + stdevs[stdevsCounter]) / 3;
 		Serial.println(stdDev);
 		if (stdDev > maxOfBackground){
 			maxOfBackground = stdDev;

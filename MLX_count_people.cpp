@@ -11,16 +11,32 @@ float* applyGaussian(float *src, int widthOfImage, int heightOfImage);
 float findAvg(float *src, int size);
 float findThreshold(float *src, int size, float minimumStep);
 float* setThreshold(float *src, int size, float threshold);
-int* detectPeople(float *src, int width, int height, Man people[], int *peopleSize);
+int* detectPeople(float *src, float *intensities, int width, int height, struct Man *people, int *peopleSize);
 float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage);
 void divideByAvg(float *src, int size, float avg, float *background, float *foreground, int *bckSize, int *foreSize);
 void findMax(int *array, int size, int *returnIndex);
 int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *size);
 int* getNeighbours(int id, int width, int height, int *size);
-void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y);
+void getObjectsProperties(int *src, float *intensities, int width, int height, int objectNum, int *x, int *y, int *widthOfObject, int *heightOfObject, float* intensity);
 void findMinMax(float *src, int size, float *min, float *max);
 float getStdDev(float *src, int size);
 
+void detectDirection(struct Image *images, int currentImage, int *in, int *out);
+int linreg(int n, struct Man **path, float* m, float* b, float* r);
+void evaluateInsAndOuts(struct Graph *graph, int *in, int *out);
+char isInAnotherPath(struct Man ***paths, struct Vertex *vertex, int numberOfPaths, int *sizesOfPaths );
+float getStdDev(float *src, int size);
+int dotProduct(int *array1, int *array2, int size);
+float norm(int *array, int size);
+int* subtract2dVector(int *array1, int *array2, int size);
+char** hungarian(int **array, int width, int height);
+int findVertexById(struct Vertex *vertices, int verticesSize, int vertexId, struct Vertex **vertex);
+int getIndexForImages(int index);
+int findVertexByIdInGraph(struct Graph *graph, int vertexId, struct Vertex **vertex);
+void removeEdgesFromVertexExceptToId(struct Vertex *vertex,int idLeft);
+void hungarianMatch(struct Graph *graph);
+void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph);
+void addEdges(struct Graph *graph);
 
 typedef struct node{
 
@@ -28,6 +44,31 @@ typedef struct node{
 	struct node* previous;
 
 }*node_ptr;
+
+struct Vertex {
+	int idLeft;
+	int idRight;
+	struct Man *human;
+	struct Edge *edges;
+	int edgesSize;
+	int frameIndex;
+};
+
+struct Edge {
+	float weight;
+	struct Vertex *to;
+	short correctionEdge;
+};
+
+struct Frame {
+	struct Vertex vertices[MAX_PEOPLE];
+	int verticesSize;
+};
+
+struct Graph {
+	struct Frame frames[IMAGE_NUM];
+	int frameSize;
+};
 
 
 node_ptr front = NULL;
@@ -331,25 +372,44 @@ int* getNeighbours(int id, int width, int height, int *size) {
 	return result;
 }
 
-void findCentroid(int *src, int width, int height, int objectNum, int *x, int *y) {
-	int volumeVal = 0;
-	*x = 0;
-	*y = 0;
+void getObjectsProperties(int *src, float *intensities, int width, int height, int objectNum, int *x, int *y, int *widthOfObject, int *heightOfObject, float* intensity) {
+	int volume = 0;
+	int minX = width, minY = height;
+	int maxX = 0, maxY = 0;
+
+	
 	for (int i = 0; i < height; ++i)
 	{
 		for (int j = 0; j < width; ++j)
 		{
 			if (src[i * width + j] == objectNum) {
-				*x = *x + i;
-				*y = *y + j;
-				volumeVal++;
+				if (i <= minY) {
+					minY = i;
+				}
+				if (j <= minX) {
+					minX = j;
+				}
+				if (j >= maxX) {
+					maxX = j;
+				}
+				if (i >= maxY) {
+					maxY = i;
+				}
+				
+				*x = *x + j;
+				*y = *y + i;
+				*intensity = *intensity + intensities[i * width + j];
+				volume++;
 			}
 		}
 
 	}
 
-	*x = *x / volumeVal;
-	*y = *y / volumeVal;
+	*widthOfObject = maxX - minX;
+	*heightOfObject = maxY - minY;
+	*x = *x / volume;
+	*y = *y / volume;
+	*intensity = *intensity / volume;
 }
 
 int visited[768];
@@ -357,7 +417,7 @@ int objectNum[768];
 int volume[768];
 int counter;
 
-int* detectPeople(float *src, int width, int height, Man *people, int *peopleSize) {
+int* detectPeople(float *src, float *intensities, int width, int height, struct Man *people, int *peopleSize) {
 	
 	enqueue(0);
 
@@ -430,10 +490,23 @@ int* detectPeople(float *src, int width, int height, Man *people, int *peopleSiz
 	{
 		// 1 pixel is approx. 2.5 cm^2. So this is 125 cm^2.
 		if (volume[i] > 50) {
-			findCentroid(objectNum, width, height, i, &x, &y);
-			people[*peopleSize].x = x;
-			people[*peopleSize].y = y;
-			*peopleSize = *peopleSize + 1;
+			int x = 0, y = 0;
+			int w = 0, h = 0;
+			float intensity = 0;
+			// Centroid x, y and width, height of object and average intensity in object
+			getObjectsProperties(objectNum, intensities, width, height, i, &x, &y, &w, &h, &intensity);
+			
+			// Because of noise everything that is not wider than 12.5 cm is noise.
+			if (w > 5) {
+				people[*peopleSize].x = x;
+				people[*peopleSize].y = y;
+				people[*peopleSize].width = w;
+				people[*peopleSize].height = h;
+				people[*peopleSize].space = volume[i];
+				people[*peopleSize].intensity = intensity;
+				people[*peopleSize].alreadyCounted = 0;
+				*peopleSize = *peopleSize + 1;
+			}
 		}
 	}
 	return objectNum;
@@ -452,6 +525,615 @@ float getStdDev(float *src, int size) {
 	return sqrt(standardDeviation/size);
 }
 
+char isInAnotherPath(struct Man ***paths, struct Vertex *vertex, int numberOfPaths, int *sizesOfPaths ) {
+	for (int i = 0; i < numberOfPaths; ++i)
+	{
+		for (int j = 0; j < sizesOfPaths[i]; ++j)
+		{
+			if (paths[i][j]->intensity == vertex->human->intensity && paths[i][j]->x == vertex->human->x && paths[i][j]->y == vertex->human->y) {
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
+/*
+n = number of data points
+path = data points in Man struct
+*b = output intercept
+*m  = output slope
+*r = output correlation coefficient (can be NULL if you don't want it)
+*/
+int linreg(int n, struct Man **path, float* m, float* b, float* r){
+    float sumx = 0.0;                      /* sum of x     */
+    float sumx2 = 0.0;                     /* sum of x**2  */
+    float sumxy = 0.0;                     /* sum of x * y */
+    float sumy = 0.0;                      /* sum of y     */
+    float sumy2 = 0.0;                     /* sum of y**2  */
+
+    for (int i = 0; i < n; i++){ 
+        sumx  += i;       
+        sumx2 += sqrt(i);  
+        sumxy += i * path[i]->y;
+        sumy  += path[i]->y;      
+        sumy2 += sqrt(path[i]->y); 
+    } 
+
+    float denom = (n * sumx2 - sqrt(sumx));
+    if (denom == 0) {
+        // singular matrix. can't solve the problem.
+        *m = 0;
+        *b = 0;
+        if (r) *r = 0;
+            return 1;
+    }
+
+    *m = (n * sumxy  -  sumx * sumy) / denom;
+    *b = (sumy * sumx2  -  sumx * sumxy) / denom;
+    if (r != NULL) {
+        *r = (sumxy - sumx * sumy / n) /    /* compute correlation coeff */
+              sqrt((sumx2 - sqrt(sumx)/n) *
+              (sumy2 - sqrt(sumy)/n));
+    }
+
+    return 0; 
+}
+
+void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
+	struct Man ***paths = (struct Man***) malloc(MAX_PEOPLE * sizeof(struct Man**));
+	for (int i = 0; i < MAX_PEOPLE; ++i)
+	{
+		paths[i] = (struct Man**) malloc(MAX_PEOPLE * sizeof(struct Man*));
+		
+	}
+	
+	int counterPaths = 0;
+	int counters[MAX_PEOPLE]; 
+	memset(counters, 0, MAX_PEOPLE * sizeof(int));
+	char newPath = FALSE;
+	for (int i = 0; i < graph->frameSize; ++i)
+	{
+		for (int j = 0; j < graph->frames[i].verticesSize; ++j)
+		{
+			struct Vertex *vertex = &graph->frames[i].vertices[j];
+			while(vertex->edgesSize > 0){
+				if(!isInAnotherPath(paths, vertex, counterPaths, counters)){
+					paths[counterPaths][counters[counterPaths]] = vertex->human;
+					counters[counterPaths]++;
+					newPath = TRUE;
+					vertex = vertex->edges[0].to;
+				}else {
+					break;
+				}	
+			}
+			if (newPath) {
+				counterPaths++;
+				newPath = FALSE;
+			}
+		}
+	}
+	float m, b, r;
+	char alreadyCounted;
+	for (int i = 0; i < counterPaths; ++i)
+	{
+		alreadyCounted = FALSE;
+		if (counters[i] <= 3) {
+			continue;
+		}
+
+		for (int j = 0; j < counters[i]; ++j)
+		{
+			if (paths[i][j]->alreadyCounted) {
+				alreadyCounted = TRUE;
+				break;
+			}			
+		}
+
+		if (alreadyCounted){
+			continue;
+		}
+
+		linreg(counters[i], paths[i], &m, &b,&r);
+		
+		if (m > 5) {
+			*in = *in + 1;
+		}
+
+		if (m < -5) {
+			*out = *out + 1;
+		}
+		
+		for (int j = 0; j < counters[i]; ++j)
+		{
+			paths[i][j]->alreadyCounted = TRUE;
+		}
+	}
+    
+
+}
+
+void detectDirection(struct Image *images, int currentImage, int *in, int *out) {
+	int previousSize = 0;
+	
+	struct Graph graph;
+	graph.frameSize = 0;
+	int idCounter = 0;
+	
+
+	for (int i = currentImage; i >= currentImage - IMAGE_NUM; --i){
+		int index = getIndexForImages(i);
+
+		if (index == -1) {
+			continue;
+		}
+		// if (images[index].time > 5) {
+		// 	break;
+		// }
+		
+		struct Frame *frame = &graph.frames[graph.frameSize];
+		frame->verticesSize = 0;
+		struct Man *people = images[index].people;
+		for (int j = 0; j < images[index].size; ++j){
+			if (people[j].alreadyCounted) {
+				continue;
+			}
+			frame->vertices[frame->verticesSize].idRight = idCounter++;
+			frame->vertices[frame->verticesSize].idLeft = idCounter++;
+			frame->vertices[frame->verticesSize].human = &people[j];
+			frame->vertices[frame->verticesSize].edges = (struct Edge*) malloc(MAX_PEOPLE_2 * sizeof(struct Edge));
+			memset(frame->vertices[frame->verticesSize].edges, 0, MAX_PEOPLE_2 * sizeof(struct Edge));
+			frame->vertices[frame->verticesSize].edgesSize = 0;
+			frame->vertices[frame->verticesSize].frameIndex = graph.frameSize;
+			frame->verticesSize++;
+		}
+		
+		addEdges(&graph);
+		calculateVertexDisjointMaximumWeightPathCover(&graph);
+		graph.frameSize++;
+	}
+
+	evaluateInsAndOuts(&graph, in, out);
+
+	
+	for (int i = 0; i < graph.frameSize; ++i)
+	{
+		for (int j = 0; j < graph.frames[i].verticesSize; ++j)
+		{
+			free(graph.frames[i].vertices[j].edges);
+		}
+	}
+}
+
+int dotProduct(int *array1, int *array2, int size) {
+	int result = 0;
+	for (int i = 0; i < size; ++i)
+	{
+		result += array1[i] * array2[i];
+	} 
+	return result;
+}
+
+float norm(int *array, int size) {
+	int result = 0;
+	for (int i = 0; i < size; ++i)
+	{
+		result += pow(array[i],2);
+	}
+	return sqrt(result);
+}
+
+int* subtract2dVector(int *array1, int *array2, int size) {
+	int *result = (int*) malloc (size * sizeof(int));
+	for (int i = 0; i < size; ++i){
+		result[i] = array1[i] - array2[i];
+	}
+	return result;
+}
+
+char** hungarian(int **array, int width, int height)
+{
+    char **results = (char **) malloc(height * sizeof(char *));
+    for (int i = 0; i < height; ++i){
+        results[i] = (char *) malloc(width * sizeof(char));
+    }
+    int i, j;
+    unsigned int m = height, n = width;
+    int k;
+    int l;
+    int s;
+    int *col_mate = (int *)malloc(height * sizeof(int));
+    col_mate[0] = 0;
+    int *row_mate = (int *) malloc(width * sizeof(int));
+    row_mate[0] = 0;
+    int *parent_row = (int *) malloc(width * sizeof(int));
+    parent_row[0] = 0;
+    int *unchosen_row = (int *) malloc(height * sizeof(int));
+    unchosen_row[0] = 0;
+    int t;
+    int q;
+    int *row_dec = (int *) malloc(height * sizeof(int));
+    row_dec[0] = 0;
+    int *col_inc = (int *) malloc(width * sizeof(int));
+    col_inc[0] = 0;
+    int *slack = (int *) malloc(width * sizeof(int));
+    slack[0] = 0;
+    int *slack_row = (int *) malloc(width * sizeof(int));
+    slack_row[0] = 0;
+    int unmatched;
+    int cost = 0;
+	int counter = 0;
+
+    for (i = 0; i < height; ++i)
+        for (j = 0; j < width; ++j)
+            results[i][j] = FALSE;
+
+    // Begin subtract column minima in order to start with lots of zeroes 12
+    for (l = 0; l < n; l++) {
+        s = array[0][l];
+        for (k = 1; k < n; k++)
+            if (array[k][l] < s)
+                s = array[k][l];
+        cost += s;
+        if (s != 0)
+            for (k = 0; k < n; k++)
+                array[k][l] -= s;
+    }
+    // End subtract column minima in order to start with lots of zeroes
+
+    // Begin initial state
+    t = 0;
+    for (l = 0; l < n; l++) {
+        row_mate[l] = -1;
+        parent_row[l] = -1;
+        col_inc[l] = 0;
+        slack[l] = INF;
+    }
+    for (k = 0; k < m; k++) {
+        s = array[k][0];
+        for (l = 1; l < n; l++){
+            if (array[k][l] < s){
+                s = array[k][l];
+            }
+        }
+        row_dec[k] = s;
+        for (l = 0; l < n; l++){
+            if (s == array[k][l] && row_mate[l] < 0) {
+                col_mate[k] = l;
+                row_mate[l] = k;
+
+                goto
+                row_done;
+            }
+        }
+        col_mate[k] = -1;
+
+        unchosen_row[t++] = k;
+        row_done:;
+    }
+    // End initial state
+
+    // Begin Hungarian algorithm
+    if (t == 0)
+        goto
+    done;
+    unmatched = t;
+    while (1) {
+
+        q = 0;
+        while (1) {
+            while (q < t) {
+                // Begin explore node q of the forest
+                {
+                    k = unchosen_row[q];
+                    s = row_dec[k];
+                    for (l = 0; l < n; l++){
+                        if (slack[l]) {
+                            int
+                            del;
+                            del = array[k][l] - s + col_inc[l];
+                            if (del < slack[l]) {
+                                if (del == 0) {
+                                    if (row_mate[l] < 0)
+                                        goto
+                                    breakthru;
+                                    slack[l] = 0;
+                                    parent_row[l] = k;
+
+                                    unchosen_row[t++] = row_mate[l];
+                                } else {
+                                    slack[l] = del;
+                                    slack_row[l] = k;
+                                }
+                            }
+                        }
+                    }
+                }
+                // End explore node q of the forest
+                q++;
+            }
+
+            // Begin introduce a new zero into the matrix
+            s = INF;
+            for (l = 0; l < n; l++){
+                if (slack[l] && slack[l] < s){
+                    s = slack[l];
+                }
+            }
+            for (q = 0; q < t; q++){
+                row_dec[unchosen_row[q]] += s;
+            }
+            for (l = 0; l < n; l++){
+                if (slack[l]) {
+                    slack[l] -= s;
+                    if (slack[l] == 0) {
+                        // Begin look at a new zero
+                        k = slack_row[l];
+
+                        if (row_mate[l] < 0) {
+                            for (j = l + 1; j < n; j++)
+                                if (slack[j] == 0)
+                                    col_inc[j] += s;
+                            goto
+                            breakthru;
+                        } else {
+                            parent_row[l] = k;
+
+                            unchosen_row[t++] = row_mate[l];
+                        }
+                        // End look at a new zero
+                    }
+                } else{
+                    col_inc[l] += s;
+                }
+            }
+            // End introduce a new zero into the matrix
+        }
+        breakthru:
+        // Begin update the matching
+        
+		while (1){
+			j = col_mate[k];
+			col_mate[k] = l;
+			row_mate[l] = k;
+			if ( j < 0 )
+				break;
+			k = parent_row[j];
+			l = j;
+			if (counter > 50)
+				break;
+			counter++;
+		}
+        // End update the matching
+        if (--unmatched == 0){
+            goto done;
+        }
+        
+        // Begin get ready for another stage 
+        t = 0;
+        for (l = 0; l < n; l++) {
+            parent_row[l] = -1;
+            slack[l] = INF;
+        }
+        for (k = 0; k < m; k++){
+            if (col_mate[k] < 0) {
+                unchosen_row[t++] = k;
+            }
+        }
+        // End get ready for another stage 
+    }
+    done:
+
+    // Begin doublecheck the solution
+    for (k = 0; k < m; k++) {
+        for (l = 0; l < n; l++) {
+            if (array[k][l] < row_dec[k] - col_inc[l]) {
+                exit(0);
+            }
+        }
+    }
+
+    for (k = 0; k < m; k++) {
+        l = col_mate[k];
+        if (l < 0 || array[k][l] != row_dec[k] - col_inc[l]) {
+            exit(0);
+        }
+    }
+    k = 0;
+    for (l = 0; l < n; l++) {
+        if (col_inc[l]) {
+            k++;
+        }
+    }
+    if (k > m) {
+        exit(0);
+    }
+    // End doublecheck the solution 
+    // End Hungarian algorithm 
+
+    for (i = 0; i < m; ++i) {
+        results[i][col_mate[i]] = TRUE;
+    }
+    for (k = 0; k < m; ++k) {
+        for (l = 0; l < n; ++l) {
+            
+            array[k][l] = array[k][l] - row_dec[k] + col_inc[l];
+        }
+        
+    }
+    for (i = 0; i < m; i++) {
+        cost += row_dec[i];
+    }
+
+    for (i = 0; i < n; i++) {
+        cost -= col_inc[i];
+    }
+
+    free(col_mate);
+	free(row_mate);
+	free(parent_row);
+	free(unchosen_row);
+	free(row_dec);
+	free(col_inc);
+	free(slack);
+	free(slack_row);
+
+    return results;
+}
+
+short wasFull = FALSE;
+
+int getIndexForImages(int index) {
+	if (index < 0) {
+		if (!wasFull) {
+			return -1;
+		}
+		index = IMAGE_NUM - index;
+	}
+	if (index >= IMAGE_NUM) {
+		index = index % IMAGE_NUM;
+		wasFull = TRUE;
+	}
+	return index;
+}
+
+int findVertexById(struct Vertex *vertices, int verticesSize, int vertexId, struct Vertex **vertex) {
+ 	for (int i = 0; i < verticesSize; ++i)
+ 	{
+ 		if (vertices[i].idLeft == vertexId || vertices[i].idRight == vertexId) {
+			*vertex = &vertices[i];
+			return 0;
+
+ 		}	
+ 	}	
+	return -1;
+}
+
+
+
+int findVertexByIdInGraph(struct Graph *graph, int vertexId, struct Vertex **vertex) {
+	int status;
+	
+	for (int i = 0; i < graph->frameSize; ++i)
+	{
+		status = findVertexById(graph->frames[i].vertices, graph->frames[i].verticesSize, vertexId, &*vertex);
+		if (status != -1){
+			return status;
+		}
+ 	}
+	return -1;
+
+	
+}
+
+
+void removeEdgesFromVertexExceptToId(struct Vertex *vertex,int idLeft) {
+	for (int i = 0; i < vertex->edgesSize; ++i)
+	{
+		if (vertex->edges[i].to->idLeft == idLeft) {
+			vertex->edges[0] = vertex->edges[i];
+			vertex->edgesSize = 1;
+		
+		}
+	}
+}
+
+
+void hungarianMatch(struct Graph *graph) {
+
+	int counter = 0;
+	for (int i = 0; i <= graph->frameSize; ++i)
+	{
+		counter += graph->frames[i].verticesSize;
+	}
+
+	int size = counter;
+	int **array = (int**) malloc(size *  sizeof(int*));
+	for (int i = 0; i < size; ++i)
+	{
+		array[i] = (int*) malloc(size *  sizeof(int));
+		memset(array[i], 1, size *  sizeof(int));
+	}
+
+	for (int i = 0; i <= graph->frameSize; ++i)
+	{
+		for (int j = 0; j < graph->frames[i].verticesSize; ++j)
+		{
+			for (int k = 0; k < graph->frames[i].vertices[j].edgesSize; ++k)
+			{
+				int idPlus = graph->frames[i].vertices[j].idRight / 2;
+				int idMinus = (graph->frames[i].vertices[j].edges[k].to->idLeft - 1) / 2;
+				array[idPlus][idMinus] = graph->frames[i].vertices[j].edges[k].weight;
+			}
+		}
+	}	
+
+	char **results = hungarian(array, size, size);
+	struct Vertex *vertex;
+	for (int i = 0; i < size - 2; ++i)
+	{
+		for (int j = 0; j < size; ++j)
+		{
+			if (results[i][j]){
+				int idRight = i * 2;
+				int idLeft = j * 2 + 1;
+				int status = findVertexByIdInGraph(graph, idRight, &vertex);
+				if (graph->frameSize == 4){
+					removeEdgesFromVertexExceptToId(vertex, idLeft);
+				}
+			}
+		}
+	}
+
+	free(results);
+	for (int i = 0; i < size; ++i)
+	{
+		free(array[i]);
+	}
+	free(array);
+}
+
+
+void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
+	if (graph->frameSize > 1) {
+		hungarianMatch(graph);
+	}
+}
+
+const float alpha = 0.5;
+
+// Go through all frames and add edges to last frame vertices. 
+// If the vertex is terminal it is extension edge, if the vertex is not terminal it is correction edge.
+void addEdges(struct Graph *graph) {
+	int edgesSize;
+	if (graph->frameSize < 1 ) {
+		return;
+	}
+	// All frames except last one
+	for (int i = graph->frameSize - 1; i < graph->frameSize; ++i)
+	{
+		// All vertices in frame
+		for (int j = 0; j < graph->frames[i].verticesSize; ++j) 
+		{
+			// Only iterating through last frame
+			for (int k = 0; k < graph->frames[graph->frameSize].verticesSize; ++k)
+			{
+				edgesSize = graph->frames[i].vertices[j].edgesSize;
+				graph->frames[i].vertices[j].edges[edgesSize].to = &graph->frames[graph->frameSize].vertices[k];
+
+				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
+
+				int from[2] = { graph->frames[i].vertices[j].human->x, graph->frames[i].vertices[j].human->y };
+				int to[2] = { graph->frames[graph->frameSize].vertices[k].human->x, graph->frames[graph->frameSize].vertices[k].human->y };
+
+				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
+				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
+				
+				graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
+				graph->frames[i].vertices[j].edgesSize++;
+			}
+		}
+	}
+}
 
 
 
