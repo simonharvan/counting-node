@@ -143,11 +143,15 @@ void setupWiFi() {
 }
 
 
+
 void setup()
 {
 	delay(4000);
 	Wire.begin(SDA_PIN, SCL_PIN);
 	Wire.setClock(400000);
+	
+	pinMode(LED_BUILTIN, OUTPUT);
+	digitalWrite(LED_BUILTIN, LOW);
 
 	Serial.begin(115200);
 	while (!Serial); //Wait for user to open terminal
@@ -163,6 +167,7 @@ long startTime;
 long stopTime;
 float stdevs[300];
 int stdevsCounter = 0;
+long lastSend = 0;
 
 void loop()
 {
@@ -201,17 +206,24 @@ void loop()
 	
 	
 	doSomethingWithResult();
-	stopTime = millis();
-	Serial.print("Loop time: ");
-	Serial.print(stopTime - startTime);
-	Serial.println(" ms");
+	// stopTime = millis();
+	// Serial.print("Loop time: ");
+	// Serial.print(stopTime - startTime);
+	// Serial.println(" ms");
 }
-
+char blinking = 0;
 
 void doSomethingWithResult() {
 	float *numbers;
 	
 	if (trainingCycles > AVG_TRAINING) {
+		if (blinking){
+			digitalWrite(LED_BUILTIN, HIGH);
+		}else {
+			digitalWrite(LED_BUILTIN, LOW);
+		}
+		blinking = !blinking;
+		
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		
 		float stdDev = getStdDev(numbers, 768);
@@ -232,18 +244,17 @@ void doSomethingWithResult() {
 			for (int i = 0; i < peopleSize; ++i){
 				printf("Man detected at x - %d, y - %d\n",  images[imagesIndex].people[i].x, images[imagesIndex].people[i].y);
 			}
-			detectDirection(images, imagesIndex, &in, &out);
-		
-		
-			printf("In - %d, Out - %d \n", in, out);
-
+			if (peopleSize > 0) {
+				detectDirection(images, imagesIndex, &in, &out);
+				printf("In - %d, Out - %d \n", in, out);
+			}
+			
 			imagesIndex++;
-			if (in > tmpIn + 4 && out > tmpOut + 4) {
+			if (startTime - lastSend >= 120 * 1000) {
 				char str[20];
 				sprintf(str, "in: %d, out: %d", in, out);
 				sendData(str);
-				tmpIn = in;
-				tmpOut = out;
+				lastSend = millis();
 			}
 
 		}
