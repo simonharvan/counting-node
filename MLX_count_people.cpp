@@ -12,7 +12,8 @@ float findAvg(float *src, int size);
 float findThreshold(float *src, int size, float minimumStep);
 float* setThreshold(float *src, int size, float threshold);
 int* detectPeople(float *src, float *intensities, int width, int height, struct Man *people, int *peopleSize);
-float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage);
+float getSourceAtEdge(float *src, int width, int height, int widthOfImage, int heightOfImage);
+float* movingAverage(float *src, int widthOfImage, int heightOfImage);
 void divideByAvg(float *src, int size, float avg, float *background, float *foreground, int *bckSize, int *foreSize);
 void findMax(int *array, int size, int *returnIndex);
 int* getUnvisitedNeighbours(int id, int width, int height, int *visited, int *size);
@@ -159,7 +160,7 @@ void clear(){
 //1 2 3
 //4   6
 //7 8 9
-float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage) {
+float getSourceAtEdge(float *src, int width, int height, int widthOfImage, int heightOfImage) {
 	float source = src[height * widthOfImage + width];
 
 	// if (height < 0 || width < 0 || height >= heightOfImage || width >= widthOfImage) {
@@ -205,6 +206,8 @@ float getSourceGaussian(float *src, int width, int height, int widthOfImage, int
 	return source;
 }
 
+
+
 void findMinMax(float *src, int size, float *min, float *max) {
 	*min = 99999999999;
 	*max = -99999999999;
@@ -233,12 +236,39 @@ float* applyGaussian(float *src, int widthOfImage, int heightOfImage) {
 					int height = h + i; 
                 	int width = w + j;
                 	
-					float source = getSourceGaussian(src, width, height, widthOfImage, heightOfImage);
+					float source = getSourceAtEdge(src, width, height, widthOfImage, heightOfImage);
 	               	sum += gausian[h + 2][w + 2] * source;
 				}
 
 			}
 			result[i * widthOfImage + j] = sum;
+
+		}
+	}
+	return result;
+}
+
+
+float* movingAverage(float *src, int widthOfImage, int heightOfImage) {
+	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(float));
+
+	for (int i = 0; i < heightOfImage; ++i)
+	{
+		for (int j = 0; j < widthOfImage; ++j)
+		{
+			float sum = 0;
+			for (int h=-1; h < 2; h++) {
+                for (int w=-1; w < 2; w++) {
+
+					int height = h + i; 
+                	int width = w + j;
+                	
+					float source = getSourceAtEdge(src, width, height, widthOfImage, heightOfImage);
+	               	sum += source;
+	               	
+				}
+			}
+			result[i * widthOfImage + j] = sum / 9;
 
 		}
 	}
@@ -1091,17 +1121,20 @@ void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
 	}
 }
 
-const float alpha = 0.5;
+const float alpha = 0.1;
 
 // Go through all frames and add edges to last frame vertices. 
 // If the vertex is terminal it is extension edge, if the vertex is not terminal it is correction edge.
 void addEdges(struct Graph *graph) {
-	int edgesSize;
-	int from[2];
-	int to[2];
+	
 	if (graph->frameSize < 1 ) {
 		return;
 	}
+	int edgesSize;
+	int from[2];
+	int to[2];
+	int *subtracted;
+	
 	// All frames except last one
 	for (int i = graph->frameSize - 1; i < graph->frameSize; ++i)
 	{
@@ -1119,19 +1152,16 @@ void addEdges(struct Graph *graph) {
 				to[0] = graph->frames[graph->frameSize].vertices[k].human->x;
 				to[1] = graph->frames[graph->frameSize].vertices[k].human->y;
 
-				int *subtracted = subtract2dVector(from, to, 2);
+				subtracted = subtract2dVector(from, to, 2);
 
 				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
-				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)));
+				float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
 
-				free(subtracted);
+				
 				graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
 				graph->frames[i].vertices[j].edgesSize++;
 			}
 		}
 	}
+	free(subtracted);
 }
-
-
-
-

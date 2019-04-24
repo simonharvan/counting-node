@@ -80,6 +80,7 @@ static struct Image images[IMAGE_NUM];
 static int peopleSize = 0;
 static int imagesIndex = 0; 
 static int in = 0, out = 0;
+int tmpIn = 0, tmpOut = 0;
 static float gaussians[768];
 
 void doSomethingWithResult(float *numbers);
@@ -199,8 +200,6 @@ void loop()
     MLX90640_BadPixelsCorrection((&mlx90640)->outlierPixels, mlx90640To, mode, &mlx90640);
 	
 	
-	
-	
 	doSomethingWithResult();
 	stopTime = millis();
 	Serial.print("Loop time: ");
@@ -211,8 +210,7 @@ void loop()
 
 void doSomethingWithResult() {
 	float *numbers;
-	int tmpIn;
-	int tmpOut;
+	
 	if (trainingCycles > AVG_TRAINING) {
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		
@@ -234,18 +232,18 @@ void doSomethingWithResult() {
 			for (int i = 0; i < peopleSize; ++i){
 				printf("Man detected at x - %d, y - %d\n",  images[imagesIndex].people[i].x, images[imagesIndex].people[i].y);
 			}
-			tmpIn = in;
-			tmpOut = out;
 			detectDirection(images, imagesIndex, &in, &out);
 		
 		
 			printf("In - %d, Out - %d \n", in, out);
 
 			imagesIndex++;
-			if (in != tmpIn || out = tmpOut) {
+			if (in > tmpIn + 4 && out > tmpOut + 4) {
 				char str[20];
 				sprintf(str, "in: %d, out: %d", in, out);
 				sendData(str);
+				tmpIn = in;
+				tmpOut = out;
 			}
 
 		}

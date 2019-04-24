@@ -38,6 +38,7 @@
 
 
   float* applyGaussian(float *src, int widthOfImage, int heightOfImage);
+  float* movingAverage(float *src, int widthOfImage, int heightOfImage);
   float findAvg(float *src, int size);
   float findThreshold(float *src, int size, float minimumStep);
   void findMinMax(float *src, int size, float *min, float *max);

@@ -204,7 +204,7 @@ void printIntMatrix(FILE *file, int *src, int width, int height) {
 //1 2 3
 //4   6
 //7 8 9
-float getSourceGaussian(float *src, int width, int height, int widthOfImage, int heightOfImage) {
+float getSourceAtEdge(float *src, int width, int height, int widthOfImage, int heightOfImage) {
 	float source = src[height * widthOfImage + width];
 
 	// if (height < 0 || width < 0 || height >= heightOfImage || width >= widthOfImage) {
@@ -250,6 +250,8 @@ float getSourceGaussian(float *src, int width, int height, int widthOfImage, int
 	return source;
 }
 
+
+
 float* applyGaussian(float *src, int widthOfImage, int heightOfImage, const float gausian[][5]) {
 	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(float));
 	int gausianDim = 5;
@@ -263,11 +265,37 @@ float* applyGaussian(float *src, int widthOfImage, int heightOfImage, const floa
 					int height = h + i; 
                 	int width = w + j;
                 	
-					float source = getSourceGaussian(src, width, height, widthOfImage, heightOfImage);
+					float source = getSourceAtEdge(src, width, height, widthOfImage, heightOfImage);
 	               	result[i * widthOfImage + j] += gausian[h + 2][w + 2] * source;
 	               	
 				}
 			}
+
+		}
+	}
+	return result;
+}
+
+float* movingAverage(float *src, int widthOfImage, int heightOfImage) {
+	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(float));
+
+	for (int i = 0; i < heightOfImage; ++i)
+	{
+		for (int j = 0; j < widthOfImage; ++j)
+		{
+			float sum = 0;
+			for (int h=-1; h < 2; h++) {
+                for (int w=-1; w < 2; w++) {
+
+					int height = h + i; 
+                	int width = w + j;
+                	
+					float source = getSourceAtEdge(src, width, height, widthOfImage, heightOfImage);
+	               	sum += source;
+	               	
+				}
+			}
+			result[i * widthOfImage + j] = sum / 9;
 
 		}
 	}
@@ -949,6 +977,16 @@ void hungarianMatch(struct Graph *graph) {
 			}
 		}
 	}	
+	// for (int i = 0; i < size; ++i)
+	// {
+	// 	for (int j = 0; j < size; ++j)
+	// 	{
+	// 		printf("%d\t ", array[i][j]);
+	// 	}
+	// 	printf("\n");
+	// }
+
+
 
 	char **results = hungarian(array, size, size);
 	struct Vertex *vertex;
@@ -959,6 +997,7 @@ void hungarianMatch(struct Graph *graph) {
 			if (results[i][j]){
 				int idRight = i * 2;
 				int idLeft = j * 2 + 1;
+				// printf("idRight - %d, idLeft - %d\n", idRight, idLeft);
 				int status = findVertexByIdInGraph(graph, idRight, &vertex);
 				if (graph->frameSize == 4){
 					removeEdgesFromVertexExceptToId(vertex, idLeft);
@@ -981,7 +1020,7 @@ void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
 	}
 }
 
-const float alpha = 0.5;
+const float alpha = 0.1;
 
 // Go through all frames and add edges to last frame vertices. 
 // If the vertex is terminal it is extension edge, if the vertex is not terminal it is correction edge.
@@ -1007,8 +1046,9 @@ void addEdges(struct Graph *graph) {
 				int from[2] = { graph->frames[i].vertices[j].human->x, graph->frames[i].vertices[j].human->y };
 				int to[2] = { graph->frames[graph->frameSize].vertices[k].human->x, graph->frames[graph->frameSize].vertices[k].human->y };
 
+				int *subtracted = subtract2dVector(from, to, 2);
 				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
-				float weight = alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtract2dVector(from, to, 2), 2))/sqrt(pow(32,2) + pow(24,2)));
+				float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
 				
 				graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
 				graph->frames[i].vertices[j].edgesSize++;
@@ -1027,7 +1067,7 @@ void printPaths(struct Graph graph) {
 	{
 		struct Vertex *vertex = &graph.frames[0].vertices[i];
 		while(vertex->edgesSize > 0){
-			printf("Path %d - x: %d y: %d\n", counter, vertex->human->x, vertex->human->y);
+			printf("Path %d - id: %d x: %d y: %d\n", counter, vertex->idRight, vertex->human->x, vertex->human->y);
 			vertex = vertex->edges[0].to;
 		}
 		counter++;
@@ -1126,7 +1166,8 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 	for (int i = 0; i < counterPaths; ++i)
 	{
 		alreadyCounted = FALSE;
-		if (counters[i] <= 3) {
+		if (counters[i] < 3) {
+			printf("Less than 3\n");
 			continue;
 		}
 
@@ -1143,12 +1184,12 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 		}
 
 		linreg(counters[i], paths[i], &m, &b,&r);
-		
-		if (m > 5) {
+		printf("m - %f\n", m);
+		if (m > 2) {
 			*in = *in + 1;
 		}
 
-		if (m < -5) {
+		if (m < -2) {
 			*out = *out + 1;
 		}
 		
@@ -1175,9 +1216,9 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		if (index == -1) {
 			continue;
 		}
-		// if (images[index].time > 5) {
-		// 	break;
-		// }
+		if (graph.frameSize > 5) {
+			break;
+		}
 		
 		struct Frame *frame = &graph.frames[graph.frameSize];
 		frame->verticesSize = 0;
@@ -1198,12 +1239,12 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		
 		addEdges(&graph);
 		calculateVertexDisjointMaximumWeightPathCover(&graph);
-		printPaths(graph);
+		
 		graph.frameSize++;
 	}
+	// printPaths(graph);
 
 	evaluateInsAndOuts(&graph, in, out);
-
 	
 	for (int i = 0; i < graph.frameSize; ++i)
 	{
@@ -1215,11 +1256,33 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 }
 struct Image* initImages() {
 	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
-	image[0].size = 2;
-	image[4].people[0].x = 20;
-	image[4].people[0].y = 20;
-	image[0].people[1].x = 21;
-	image[0].people[1].y = 19;
+	image[0].size = 1;
+	image[0].people[0].x = 2;
+	image[0].people[0].y = 2;
+
+	image[1].size = 2;
+	image[1].people[0].x = 2;
+	image[1].people[0].y = 6;
+	image[1].people[0].x = 2;
+	image[1].people[0].y = 2;
+
+	image[2].size = 2;
+	image[2].people[0].x = 2;
+	image[2].people[0].y = 12;
+	image[2].people[1].x = 2;
+	image[2].people[1].y = 6;
+
+	image[3].size = 2;
+	image[3].people[0].x = 3;
+	image[3].people[0].y = 16;
+	image[3].people[1].x = 1;
+	image[3].people[1].y = 10;
+	
+	image[4].size = 2;
+	image[4].people[0].x = 2;
+	image[4].people[0].y = 22;
+	image[4].people[1].x = 2;
+	image[4].people[1].y = 14;
 
 	image[0].people[0].alreadyCounted = 0;
 	image[0].people[1].alreadyCounted = 0;
@@ -1231,30 +1294,6 @@ struct Image* initImages() {
 	image[3].people[1].alreadyCounted = 0;
 	image[4].people[0].alreadyCounted = 0;
 	image[4].people[1].alreadyCounted = 0;
-	
-	image[1].size = 2;
-	image[3].people[0].x = 18;
-	image[3].people[0].y = 18;
-	image[1].people[1].x = 15;
-	image[1].people[1].y = 14;
-
-	image[2].size = 2;
-	image[2].people[0].x = 12;
-	image[2].people[0].y = 12;
-	image[2].people[1].x = 14;
-	image[2].people[1].y = 10;
-
-	image[3].size = 2;
-	image[1].people[0].x = 8;
-	image[1].people[0].y = 8;
-	image[3].people[1].x = 5;
-	image[3].people[1].y = 5;
-	
-	image[4].size = 2;
-	image[0].people[0].x = 7;
-	image[0].people[0].y = 3;
-	image[4].people[1].x = 1;
-	image[4].people[1].y = 1;
 
 	return image;
 }
@@ -1262,7 +1301,7 @@ struct Image* initImages() {
 int main ( void )
 {
 	
-	static const char filename[] = "in-gaussian-sideways";
+	static const char filename[] = "long-dataset";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
@@ -1307,7 +1346,7 @@ int main ( void )
 	int trainingCycles = 0;
 
 	float maxOfBackground = -99999999999;
-	
+	ssize_t read;
 	char *line = NULL;
 	size_t len = 0;
 	int in = 0, out = 0;
@@ -1330,9 +1369,9 @@ int main ( void )
 			numbers[i] = strtof(numberStrings[i], NULL);
 		}
 
-		float gaussians[768];
-		memcpy(gaussians, numbers, sizeof(gaussians));
-		// float *gaussians = applyGaussian(numbers, 32, 24, gausian);
+		// float gaussians[768];
+		// memcpy(gaussians, numbers, sizeof(gaussians));
+		float *gaussians = applyGaussian(numbers, 32, 24, gausian);
 		// printFloatMatrix(normalizeFile, gaussians, 32, 24);
 
 		calculateHistogram(gaussians, 768, &min, &max);
@@ -1347,9 +1386,8 @@ int main ( void )
 		
 
 		printIntMatrix(outputfile, detected, 32, 24);
-		
-		// printf("Image n. %d - Threshold: %f\n", trainingCycles, threshold);
-		// struct Man *people = images[imagesIndex].people;
+	
+		struct Man *people = images[imagesIndex].people;
 		// printf("Image n. %d\n", imagesIndex);
 		// for (int i = 0; i < images[imagesIndex].size; ++i)
 		// {
@@ -1368,6 +1406,21 @@ int main ( void )
 	// struct Image *imageTest = initImages();
 		
 	// detectDirection(imageTest, 4, &in, &out);
+	// printf("In - %d, Out - %d \n", in, out);
+	// int from[2] = { 2, 3 };
+	// printf("x - %d, y - %d\n", from[0], from[1]);
+	// for (int i = 0; i < 2; ++i)
+	// {
+		// int to[2] = { 24, 17 };
+		// int *subtracted = subtract2dVector(from, to, 2);
+		// float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
+		// printf("i: %d - %f\n", 0, weight);
+	// }
+	
+
+	// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
+	
+	
 		
 	fclose ( outputfile );
 	fclose ( normalizeFile );
