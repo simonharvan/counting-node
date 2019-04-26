@@ -7,6 +7,7 @@
 #define TRUE 1
 #define FALSE 0
 
+float* edgeEnhancment(float *src, int widthOfImage, int heightOfImage);
 float* applyGaussian(float *src, int widthOfImage, int heightOfImage);
 float findAvg(float *src, int size);
 float findThreshold(float *src, int size, float minimumStep);
@@ -21,7 +22,6 @@ int* getNeighbours(int id, int width, int height, int *size);
 void getObjectsProperties(int *src, float *intensities, int width, int height, int objectNum, int *x, int *y, int *widthOfObject, int *heightOfObject, float* intensity);
 void findMinMax(float *src, int size, float *min, float *max);
 float getStdDev(float *src, int size);
-
 void detectDirection(struct Image *images, int currentImage, int *in, int *out);
 int linreg(int n, struct Man **path, float* m, float* b, float* r);
 void evaluateInsAndOuts(struct Graph *graph, int *in, int *out);
@@ -269,6 +269,29 @@ float* movingAverage(float *src, int widthOfImage, int heightOfImage) {
 				}
 			}
 			result[i * widthOfImage + j] = sum / 9;
+
+		}
+	}
+	return result;
+}
+
+float* edgeEnhancment(float *src, int widthOfImage, int heightOfImage) {
+	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(float));
+	int dim = 3;
+	for (int i = 0; i < heightOfImage; ++i)
+	{
+		for (int j = 0; j < widthOfImage; ++j)
+		{
+			for (int h=-1; h < dim - 1 ; h++) {
+                for (int w=-1; w < dim - 1 ; w++) {
+
+					int height = h + i; 
+                	int width = w + j;
+                	
+					float source = getSourceAtEdge(src, width, height, widthOfImage, heightOfImage);
+	               	result[i * widthOfImage + j] += edgeEnhancmentMatrix[h + 1][w + 1] * source;
+				}
+			}
 
 		}
 	}

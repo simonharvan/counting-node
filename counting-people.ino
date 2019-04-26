@@ -217,7 +217,7 @@ char blinking = 0;
 
 void doSomethingWithResult() {
 	float *numbers;
-	
+	int state;
 	if (trainingCycles > AVG_TRAINING) {
 		if (blinking){
 			digitalWrite(LED_BUILTIN, HIGH);
@@ -230,15 +230,17 @@ void doSomethingWithResult() {
 		
 		float stdDev = getStdDev(numbers, 768);
 		if (stdDev > maxOfBackground) {
-			findMinMax(numbers, 768, &minValue, &maxValue);
+			float *picture = edgeEnhancment(numbers, 32, 24);
+
+			findMinMax(picture, 768, &minValue, &maxValue);
 			
-			float threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
+			float threshold = findThreshold(picture, 768, (maxValue - minValue) / 2);
 			
-			numbers = setThreshold(numbers, 768, threshold);
+			picture = setThreshold(picture, 768, threshold);
 			
 			imagesIndex = getIndexForImages(imagesIndex);
 			peopleSize = images[imagesIndex].size = 0;
-			int *detected = detectPeople(numbers, mlx90640To, 32, 24, images[imagesIndex].people, &peopleSize);
+			int *detected = detectPeople(picture, mlx90640To, 32, 24, images[imagesIndex].people, &peopleSize);
 			images[imagesIndex].size = peopleSize;
 			images[imagesIndex].time = millis();
 
@@ -258,8 +260,9 @@ void doSomethingWithResult() {
 				sendData(str);
 				lastSend = millis();
 			}
-
+			free(picture);
 		}
+
 	}else {
 		state = digitalRead(HCSR501_PIN);
 		if (state == HIGH) {
