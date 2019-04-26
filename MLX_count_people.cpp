@@ -7,7 +7,6 @@
 #define TRUE 1
 #define FALSE 0
 
-float* edgeEnhancment(float *src, int widthOfImage, int heightOfImage);
 float* applyGaussian(float *src, int widthOfImage, int heightOfImage);
 float findAvg(float *src, int size);
 float findThreshold(float *src, int size, float minimumStep);
@@ -275,28 +274,6 @@ float* movingAverage(float *src, int widthOfImage, int heightOfImage) {
 	return result;
 }
 
-float* edgeEnhancment(float *src, int widthOfImage, int heightOfImage) {
-	float *result = (float*) malloc(widthOfImage * heightOfImage * sizeof(float));
-	int dim = 3;
-	for (int i = 0; i < heightOfImage; ++i)
-	{
-		for (int j = 0; j < widthOfImage; ++j)
-		{
-			for (int h=-1; h < dim - 1 ; h++) {
-                for (int w=-1; w < dim - 1 ; w++) {
-
-					int height = h + i; 
-                	int width = w + j;
-                	
-					float source = getSourceAtEdge(src, width, height, widthOfImage, heightOfImage);
-	               	result[i * widthOfImage + j] += edgeEnhancmentMatrix[h + 1][w + 1] * source;
-				}
-			}
-
-		}
-	}
-	return result;
-}
 
 float findAvg(float *src, int size) {
 	long double sum = 0;

@@ -230,17 +230,17 @@ void doSomethingWithResult() {
 		
 		float stdDev = getStdDev(numbers, 768);
 		if (stdDev > maxOfBackground) {
-			float *picture = edgeEnhancment(numbers, 32, 24);
+			
 
-			findMinMax(picture, 768, &minValue, &maxValue);
+			findMinMax(numbers, 768, &minValue, &maxValue);
 			
-			float threshold = findThreshold(picture, 768, (maxValue - minValue) / 2);
+			float threshold = findThreshold(numbers, 768, (maxValue - minValue) / 2);
 			
-			picture = setThreshold(picture, 768, threshold);
+			numbers = setThreshold(numbers, 768, threshold);
 			
 			imagesIndex = getIndexForImages(imagesIndex);
 			peopleSize = images[imagesIndex].size = 0;
-			int *detected = detectPeople(picture, mlx90640To, 32, 24, images[imagesIndex].people, &peopleSize);
+			int *detected = detectPeople(numbers, mlx90640To, 32, 24, images[imagesIndex].people, &peopleSize);
 			images[imagesIndex].size = peopleSize;
 			images[imagesIndex].time = millis();
 
@@ -260,7 +260,7 @@ void doSomethingWithResult() {
 				sendData(str);
 				lastSend = millis();
 			}
-			free(picture);
+		
 		}
 
 	}else {
