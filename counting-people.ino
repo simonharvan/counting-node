@@ -49,6 +49,7 @@
 
 #define SDA_PIN 5 //is ok with 0 too
 #define SCL_PIN 4
+#define HCSR501_PIN 13 
 
 const int16_t MLX90640_address = 0x33; //Default 7-bit unshifted address of the MLX90640
 
@@ -152,6 +153,7 @@ void setup()
 	
 	pinMode(LED_BUILTIN, OUTPUT);
 	digitalWrite(LED_BUILTIN, LOW);
+	pinMode(HCSR501_PIN, INPUT);
 
 	Serial.begin(115200);
 	while (!Serial); //Wait for user to open terminal
@@ -259,12 +261,16 @@ void doSomethingWithResult() {
 
 		}
 	}else {
+		state = digitalRead(HCSR501_PIN);
+		if (state == HIGH) {
+			return;
+		}
 		trainingCycles++;
 		if (trainingCycles < 5) {
 			free(numbers);
 			return;
 		}
-		
+
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		float stdDev = getStdDev(numbers, 768);
 		stdevs[stdevsCounter] = stdDev;

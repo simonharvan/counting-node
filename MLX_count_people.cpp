@@ -664,16 +664,21 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 		Serial.println(m);
 		if (m > 1) {
 			*in = *in + 1;
+			for (int j = 0; j < counters[i]; ++j)
+			{
+				paths[i][j]->alreadyCounted = TRUE;
+			}
 		}
 
 		if (m < -1) {
 			*out = *out + 1;
+			for (int j = 0; j < counters[i]; ++j)
+			{
+				paths[i][j]->alreadyCounted = TRUE;
+			}
 		}
 		
-		for (int j = 0; j < counters[i]; ++j)
-		{
-			paths[i][j]->alreadyCounted = TRUE;
-		}
+		
 	}
 }
 
