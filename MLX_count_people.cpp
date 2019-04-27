@@ -1141,7 +1141,7 @@ void addEdges(struct Graph *graph) {
 	int *subtracted;
 	
 	// All frames except last one
-	for (int i = graph->frameSize - 1; i < graph->frameSize; ++i)
+	for (int i = 0; i < graph->frameSize; ++i)
 	{
 		// All vertices in frame
 		for (int j = 0; j < graph->frames[i].verticesSize; ++j) 
@@ -1149,24 +1149,27 @@ void addEdges(struct Graph *graph) {
 			// Only iterating through last frame
 			for (int k = 0; k < graph->frames[graph->frameSize].verticesSize; ++k)
 			{
-				edgesSize = graph->frames[i].vertices[j].edgesSize;
-				graph->frames[i].vertices[j].edges[edgesSize].to = &graph->frames[graph->frameSize].vertices[k];
+				if (i == graph->frameSize - 1 || graph->frames[i].vertices[j].edgesSize == 0) {
+					edgesSize = graph->frames[i].vertices[j].edgesSize;
+					graph->frames[i].vertices[j].edges[edgesSize].to = &graph->frames[graph->frameSize].vertices[k];
 
-				from[0] = graph->frames[i].vertices[j].human->x;
-				from[1] = graph->frames[i].vertices[j].human->y;
-				to[0] = graph->frames[graph->frameSize].vertices[k].human->x;
-				to[1] = graph->frames[graph->frameSize].vertices[k].human->y;
+					from[0] = graph->frames[i].vertices[j].human->x;
+					from[1] = graph->frames[i].vertices[j].human->y;
+					to[0] = graph->frames[graph->frameSize].vertices[k].human->x;
+					to[1] = graph->frames[graph->frameSize].vertices[k].human->y;
 
-				subtracted = subtract2dVector(from, to, 2);
+					subtracted = subtract2dVector(from, to, 2);
 
-				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
-				float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
-
-				
-				graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
-				graph->frames[i].vertices[j].edgesSize++;
+					// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
+					float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
+					
+					free(subtracted);
+					
+					graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
+					graph->frames[i].vertices[j].edgesSize++;
+				}
 			}
 		}
 	}
-	free(subtracted);
+	
 }

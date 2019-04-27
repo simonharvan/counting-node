@@ -18,6 +18,7 @@
 
 struct Man
 {
+	float id;
 	int x;
     int y;
     int width;
@@ -247,6 +248,41 @@ float getSourceAtEdge(float *src, int width, int height, int widthOfImage, int h
 		source = src[(height - heightOfImage) * widthOfImage + (width - widthOfImage)];
 		
 	}
+	// 1
+	// if (height < 0 && width < 0) {
+	// 	source = src[0];
+		
+	// // 2
+	// } else if (height < 0 && width >= 0 && width < widthOfImage) {
+	// 	source = src[width];
+		
+ // 	// 3
+	// } else if (height < 0 && width >= widthOfImage) {
+	// 	source = src[widthOfImage - 1];
+		
+	// // 4 
+	// } else if (height >= 0 && height < heightOfImage && width < 0) {
+	// 	source = src[height * widthOfImage];
+		
+	// // 6
+	// } else if(height >= 0 && height < heightOfImage && width >= widthOfImage) {
+	// 	source = src[height * widthOfImage + widthOfImage - 1];
+		
+
+	// // 7
+	// } else if(height >= heightOfImage && width < 0) {
+	// 	source = src[heightOfImage * widthOfImage];
+		
+	
+	// // 8
+	// } else if(height >= heightOfImage && width >= 0 && width < widthOfImage) {
+	// 	source = src[heightOfImage * widthOfImage + width];
+
+	// // 9
+	// } else if(height >= heightOfImage && width >= widthOfImage) {
+	// 	source = src[heightOfImage * widthOfImage + widthOfImage - 1];
+		
+	// }
 	return source;
 }
 
@@ -558,6 +594,7 @@ int* detectPeople(float *src, float *intensities, int width, int height, struct 
 			
 			// Because of noise everything that is not wider than 12.5 cm is noise.
 			if (w > 5) {
+				people[*peopleSize].id = rand() * 1000;
 				people[*peopleSize].x = x;
 				people[*peopleSize].y = y;
 				people[*peopleSize].width = w;
@@ -1020,6 +1057,28 @@ void calculateVertexDisjointMaximumWeightPathCover(struct Graph *graph) {
 	}
 }
 
+int* calculateMotionVector(struct Graph *graph, struct Vertex vertex) {
+	int *result;
+	if (vertex.frameIndex - 1 < 0) {
+		result = (int*) malloc(2 * sizeof(int));
+		result[0] = vertex.human->x;
+		result[1] = vertex.human->y;
+		return result;
+	}
+	for (int i = 0; i < graph->frames[vertex.frameIndex - 1].verticesSize; ++i)
+	{
+		for (int j = 0; j < graph->frames[vertex.frameIndex - 1].vertices[i].edgesSize; ++j) 
+		{
+			if (graph->frames[vertex.frameIndex - 1].vertices[i].edges[j].to->idRight == vertex.idRight) {
+				int from[2] = {graph->frames[vertex.frameIndex - 1].vertices[i].human->x, graph->frames[vertex.frameIndex - 1].vertices[i].human->y };
+				int to[2] = { vertex.human->x, vertex.human->y };
+				result = subtract2dVector(from, to, 2);
+			}
+		}
+	}
+	return result;
+}
+
 const float alpha = 0.1;
 
 // Go through all frames and add edges to last frame vertices. 
@@ -1030,7 +1089,7 @@ void addEdges(struct Graph *graph) {
 		return;
 	}
 	// All frames except last one
-	for (int i = graph->frameSize - 1; i < graph->frameSize; ++i)
+	for (int i = 0; i < graph->frameSize; ++i)
 	{
 		// All vertices in frame
 		for (int j = 0; j < graph->frames[i].verticesSize; ++j) 
@@ -1038,20 +1097,22 @@ void addEdges(struct Graph *graph) {
 			// Only iterating through last frame
 			for (int k = 0; k < graph->frames[graph->frameSize].verticesSize; ++k)
 			{
-				edgesSize = graph->frames[i].vertices[j].edgesSize;
-				graph->frames[i].vertices[j].edges[edgesSize].to = &graph->frames[graph->frameSize].vertices[k];
+				if (i == graph->frameSize - 1 || graph->frames[i].vertices[j].edgesSize == 0) {
+					edgesSize = graph->frames[i].vertices[j].edgesSize;
+					graph->frames[i].vertices[j].edges[edgesSize].to = &graph->frames[graph->frameSize].vertices[k];
 
-				graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
+					graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
 
-				int from[2] = { graph->frames[i].vertices[j].human->x, graph->frames[i].vertices[j].human->y };
-				int to[2] = { graph->frames[graph->frameSize].vertices[k].human->x, graph->frames[graph->frameSize].vertices[k].human->y };
+					int *from = calculateMotionVector(graph, graph->frames[i].vertices[j]);
+					int to[2] = { graph->frames[graph->frameSize].vertices[k].human->x, graph->frames[graph->frameSize].vertices[k].human->y };
 
-				int *subtracted = subtract2dVector(from, to, 2);
-				// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
-				float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
-				
-				graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
-				graph->frames[i].vertices[j].edgesSize++;
+					int *subtracted = subtract2dVector(from, to, 2);
+					// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
+					float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
+					
+					graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
+					graph->frames[i].vertices[j].edgesSize++;
+				}
 			}
 		}
 	}
@@ -1079,7 +1140,7 @@ char isInAnotherPath(struct Man ***paths, struct Vertex *vertex, int numberOfPat
 	{
 		for (int j = 0; j < sizesOfPaths[i]; ++j)
 		{
-			if (paths[i][j]->intensity == vertex->human->intensity && paths[i][j]->x == vertex->human->x && paths[i][j]->y == vertex->human->y) {
+			if (paths[i][j]->id == vertex->human->id && paths[i][j]->x == vertex->human->x && paths[i][j]->y == vertex->human->y) {
 				return TRUE;
 			}
 		}
@@ -1151,6 +1212,7 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 					counters[counterPaths]++;
 					newPath = TRUE;
 					vertex = vertex->edges[0].to;
+					printf("Path %d - id: %d x: %d y: %d\n", counterPaths, vertex->idRight, vertex->human->x, vertex->human->y);
 				}else {
 					break;
 				}	
@@ -1167,6 +1229,7 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 	{
 		alreadyCounted = FALSE;
 		if (counters[i] < 3) {
+
 			printf("Less than 3\n");
 			continue;
 		}
@@ -1186,17 +1249,24 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 		linreg(counters[i], paths[i], &m, &b,&r);
 		printf("m - %f\n", m);
 		if (m > 2) {
+			printf("Path %d - IN\n", i);
 			*in = *in + 1;
+			for (int j = 0; j < counters[i]; ++j)
+			{
+				paths[i][j]->alreadyCounted = TRUE;
+			}
 		}
 
 		if (m < -2) {
+			printf("Path %d - OUT\n", i);
 			*out = *out + 1;
+			for (int j = 0; j < counters[i]; ++j)
+			{
+				paths[i][j]->alreadyCounted = TRUE;
+			}
 		}
 		
-		for (int j = 0; j < counters[i]; ++j)
-		{
-			paths[i][j]->alreadyCounted = TRUE;
-		}
+		
 	}
     
 
@@ -1254,12 +1324,14 @@ void detectDirection(struct Image *images, int currentImage, int *in, int *out) 
 		}
 	}
 }
+
+// Two people after each other
 struct Image* initImages() {
 	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
 	image[0].size = 1;
 	image[0].people[0].x = 2;
 	image[0].people[0].y = 2;
-
+	
 	image[1].size = 2;
 	image[1].people[0].x = 2;
 	image[1].people[0].y = 6;
@@ -1275,7 +1347,7 @@ struct Image* initImages() {
 	image[3].size = 2;
 	image[3].people[0].x = 3;
 	image[3].people[0].y = 16;
-	image[3].people[1].x = 1;
+	image[3].people[1].x = 3;
 	image[3].people[1].y = 10;
 	
 	image[4].size = 2;
@@ -1298,10 +1370,229 @@ struct Image* initImages() {
 	return image;
 }
 
+// Two people against each other
+struct Image* initImages2() {
+	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
+	image[0].size = 2;
+
+	image[0].people[0].x = 20;
+	image[0].people[0].y = 24;
+	image[0].people[1].x = 2;
+	image[0].people[1].y = 2;
+
+	image[1].size = 2;
+	image[1].people[0].x = 20;
+	image[1].people[0].y = 18;
+	image[1].people[1].x = 2;
+	image[1].people[1].y = 5;
+
+	image[2].size = 2;
+	image[2].people[0].x = 20;
+	image[2].people[0].y = 12;
+	image[2].people[1].x = 2;
+	image[2].people[1].y = 9;
+
+	image[3].size = 2;
+	image[3].people[0].x = 20;
+	image[3].people[0].y = 7;
+	image[3].people[1].x = 3;
+	image[3].people[1].y = 15;
+	
+	image[4].size = 2;
+	image[4].people[0].x = 20;
+	image[4].people[0].y = 3;
+	image[4].people[1].x = 2;
+	image[4].people[1].y = 19;
+
+	image[0].people[0].alreadyCounted = 0;
+	image[0].people[1].alreadyCounted = 0;
+	image[1].people[0].alreadyCounted = 0;
+	image[1].people[1].alreadyCounted = 0;
+	image[2].people[0].alreadyCounted = 0;
+	image[2].people[1].alreadyCounted = 0;
+	image[3].people[0].alreadyCounted = 0;
+	image[3].people[1].alreadyCounted = 0;
+	image[4].people[0].alreadyCounted = 0;
+	image[4].people[1].alreadyCounted = 0;
+
+	return image;
+}
+
+
+// Two people close against each other
+struct Image* initImages3() {
+	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
+	image[0].size = 2;
+
+	image[0].people[0].x = 11;
+	image[0].people[0].y = 24;
+	image[0].people[1].x = 2;
+	image[0].people[1].y = 2;
+
+	image[1].size = 2;
+	image[1].people[0].x = 11;
+	image[1].people[0].y = 18;
+	image[1].people[1].x = 2;
+	image[1].people[1].y = 5;
+
+	image[2].size = 2;
+	image[2].people[0].x = 11;
+	image[2].people[0].y = 12;
+	image[2].people[1].x = 2;
+	image[2].people[1].y = 9;
+
+	image[3].size = 2;
+	image[3].people[0].x = 11;
+	image[3].people[0].y = 7;
+	image[3].people[1].x = 3;
+	image[3].people[1].y = 15;
+	
+	image[4].size = 2;
+	image[4].people[0].x = 10;
+	image[4].people[0].y = 3;
+	image[4].people[1].x = 2;
+	image[4].people[1].y = 19;
+
+	image[0].people[0].alreadyCounted = 0;
+	image[0].people[1].alreadyCounted = 0;
+	image[1].people[0].alreadyCounted = 0;
+	image[1].people[1].alreadyCounted = 0;
+	image[2].people[0].alreadyCounted = 0;
+	image[2].people[1].alreadyCounted = 0;
+	image[3].people[0].alreadyCounted = 0;
+	image[3].people[1].alreadyCounted = 0;
+	image[4].people[0].alreadyCounted = 0;
+	image[4].people[1].alreadyCounted = 0;
+
+	return image;
+}
+
+
+//Two people after each other + one close against each other
+struct Image* initImages4() {
+	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
+	image[0].size = 2;
+	image[0].people[0].x = 11;
+	image[0].people[0].y = 24;
+	image[0].people[1].x = 2;
+	image[0].people[1].y = 2;
+
+	image[1].size = 3;
+	image[1].people[0].x = 11;
+	image[1].people[0].y = 18;
+	image[1].people[1].x = 2;
+	image[1].people[1].y = 5;
+	image[1].people[2].x = 3;
+	image[1].people[2].y = 9;
+
+	image[2].size = 3;
+	image[2].people[0].x = 11;
+	image[2].people[0].y = 12;
+	image[2].people[1].x = 2;
+	image[2].people[1].y = 10;
+	image[2].people[2].x = 2;
+	image[2].people[2].y = 15;
+
+	image[3].size = 3;
+	image[3].people[0].x = 11;
+	image[3].people[0].y = 7;
+	image[3].people[1].x = 3;
+	image[3].people[1].y = 15;
+	image[4].people[2].x = 3;
+	image[4].people[2].y = 19;
+	
+	image[4].size = 2;
+	image[4].people[0].x = 10;
+	image[4].people[0].y = 3;
+	image[4].people[1].x = 2;
+	image[4].people[1].y = 19;
+
+	image[0].people[0].alreadyCounted = 0;
+	image[0].people[1].alreadyCounted = 0;
+	image[1].people[0].alreadyCounted = 0;
+	image[1].people[1].alreadyCounted = 0;
+	image[2].people[0].alreadyCounted = 0;
+	image[2].people[1].alreadyCounted = 0;
+	image[3].people[0].alreadyCounted = 0;
+	image[3].people[1].alreadyCounted = 0;
+	image[4].people[0].alreadyCounted = 0;
+	image[4].people[1].alreadyCounted = 0;
+
+	return image;
+}
+
+//Two people and two people against each other
+struct Image* initImages5() {
+	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
+	image[0].size = 4;
+	image[0].people[0].x = 11;
+	image[0].people[0].y = 24;
+	image[0].people[1].x = 2;
+	image[0].people[1].y = 2;
+	image[0].people[2].x = 11;
+	image[0].people[2].y = 20;
+	image[0].people[3].x = 2;
+	image[0].people[3].y = 5;
+
+	image[1].size = 4;
+	image[1].people[0].x = 11;
+	image[1].people[0].y = 20;
+	image[1].people[1].x = 2;
+	image[1].people[1].y = 5;
+	image[1].people[2].x = 11;
+	image[1].people[2].y = 16;
+	image[1].people[3].x = 2;
+	image[1].people[3].y = 10;
+
+	image[2].size = 4;
+	image[2].people[0].x = 11;
+	image[2].people[0].y = 12;
+	image[2].people[1].x = 2;
+	image[2].people[1].y = 10;
+	image[2].people[2].x = 11;
+	image[2].people[2].y = 8;
+	image[2].people[3].x = 2;
+	image[2].people[3].y = 15;
+
+	image[3].size = 4;
+	image[3].people[0].x = 11;
+	image[3].people[0].y = 7;
+	image[3].people[1].x = 3;
+	image[3].people[1].y = 15;
+	image[3].people[2].x = 11;
+	image[3].people[2].y = 4;
+	image[3].people[3].x = 3;
+	image[3].people[3].y = 19;
+	
+	image[4].size = 4;
+	image[4].people[0].x = 10;
+	image[4].people[0].y = 3;
+	image[4].people[1].x = 2;
+	image[4].people[1].y = 19;
+	image[4].people[2].x = 10;
+	image[4].people[2].y = 1;
+	image[4].people[3].x = 2;
+	image[4].people[3].y = 23;
+
+	image[0].people[0].alreadyCounted = 0;
+	image[0].people[1].alreadyCounted = 0;
+	image[1].people[0].alreadyCounted = 0;
+	image[1].people[1].alreadyCounted = 0;
+	image[2].people[0].alreadyCounted = 0;
+	image[2].people[1].alreadyCounted = 0;
+	image[3].people[0].alreadyCounted = 0;
+	image[3].people[1].alreadyCounted = 0;
+	image[4].people[0].alreadyCounted = 0;
+	image[4].people[1].alreadyCounted = 0;
+
+	return image;
+}
+
+
 int main ( void )
 {
 	
-	static const char filename[] = "long-dataset";
+	static const char filename[] = "tmp-7";
 	static const float gausian[5][5] = {
 										{0.002969,0.013306,0.021938,0.013306,0.002969},
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
@@ -1309,6 +1600,16 @@ int main ( void )
 										{0.013306,0.059634,0.098320,0.059634,0.013306},
 										{0.002969,0.013306,0.021938,0.013306,0.002969}
 									};
+	static const float edgeEnhancmentMatrixX[3][3] = {
+		{1, 0, 1},
+		{1, 0, 1},
+		{1, 0, 1}
+	};
+	static const float edgeEnhancmentMatrixY[3][3] = {
+		{1, 1, 1},
+		{0, 0, 0},
+		{1, 1, 1}
+	};
 	FILE *file = fopen ( filename, "r" );
 	if ( file == NULL ) {
 		perror ( filename ); /* why didn't the file open? */
@@ -1352,61 +1653,100 @@ int main ( void )
 	int in = 0, out = 0;
 	long currentImage = 0;
 
-	while ((read = getline(&line, &len, file)) != -1) {
-		trainingCycles++;
+	// while ((read = getline(&line, &len, file)) != -1) {
+	// 	trainingCycles++;
 		
 		
-		char *numberStrings[768];
-		memset(numberStrings, 0, 768);
-		int i = 0;
-		char *p = strtok( line, ",");
-		while (p != NULL) {
-			numberStrings[i++] = p;
-			p = strtok(NULL, ",");
-		}
-		for (int i = 0; i < 768; ++i)
-		{
-			numbers[i] = strtof(numberStrings[i], NULL);
-		}
+	// 	char *numberStrings[768];
+	// 	memset(numberStrings, 0, 768);
+	// 	int i = 0;
+	// 	char *p = strtok( line, ",");
+	// 	while (p != NULL) {
+	// 		numberStrings[i++] = p;
+	// 		p = strtok(NULL, ",");
+	// 	}
+	// 	for (int i = 0; i < 768; ++i)
+	// 	{
+	// 		numbers[i] = strtof(numberStrings[i], NULL);
+	// 	}
 
-		// float gaussians[768];
-		// memcpy(gaussians, numbers, sizeof(gaussians));
-		float *gaussians = applyGaussian(numbers, 32, 24, gausian);
-		// printFloatMatrix(normalizeFile, gaussians, 32, 24);
-
-		calculateHistogram(gaussians, 768, &min, &max);
-		float threshold = findThreshold(gaussians, 768, (max - min) / 10);
+	// 	// float gaussians[768];
+	// 	float intensities[768];
 		
-		setThreshold(gaussians, 768, threshold);
-		imagesIndex = getIndexForImages(imagesIndex);
-		peopleSize = images[imagesIndex].size = 0;
-		int *detected = detectPeople(gaussians, numbers, 32, 24, images[imagesIndex].people, &peopleSize);
-		images[imagesIndex].size = peopleSize;
-		images[imagesIndex].time = currentImage;
+		
+	// 	// float *gaussians = movingAverage(numbers, 32, 24);
+	// 	float *gaussians = applyGaussian(numbers, 32, 24, gausian);
+	// 	// printFloatMatrix(outputfile, gaussians, 32, 24);
+	// 	// gaussians = edgeEnhancment(gaussians, 32, 24, edgeEnhancmentMatrixX, edgeEnhancmentMatrixY);
+	// 	memcpy(intensities, gaussians, sizeof(intensities));
+
+	// 	calculateHistogram(gaussians, 768, &min, &max);
+	// 	float threshold = findThreshold(gaussians, 768, (max - min) / 10);
+		
+	// 	setThreshold(gaussians, 768, threshold);
+	// 	// printFloatMatrix(normalizeFile, gaussians, 32, 24);
+	// 	// imagesIndex = getIndexForImages(imagesIndex);
+	// 	peopleSize = images[imagesIndex].size = 0;
+	// 	int *detected = detectPeople(gaussians, intensities, 32, 24, images[imagesIndex].people, &peopleSize);
+	// 	images[imagesIndex].size = peopleSize;
+	// 	// images[imagesIndex].time = currentImage;
 		
 
-		printIntMatrix(outputfile, detected, 32, 24);
+	// 	printIntMatrix(normalizeFile, detected, 32, 24);
 	
-		struct Man *people = images[imagesIndex].people;
-		// printf("Image n. %d\n", imagesIndex);
-		// for (int i = 0; i < images[imagesIndex].size; ++i)
-		// {
-		// 	printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
-		// }
+	// 	struct Man *people = images[imagesIndex].people;
+	// 	printf("Image n. %d\n", imagesIndex);
+	// 	for (int i = 0; i < images[imagesIndex].size; ++i)
+	// 	{
+	// 		printf("Man detected at x - %d, y - %d, width - %d, height - %d, space - %d, intensity - %f\n", people[i].x, people[i].y, people[i].width, people[i].height, people[i].space, people[i].intensity);
+	// 	}
 		
 		
-		detectDirection(images, imagesIndex, &in, &out);
+	// 	// detectDirection(images, imagesIndex, &in, &out);
 		
 		
-		printf("In - %d, Out - %d \n", in, out);
+	// 	// printf("In - %d, Out - %d \n", in, out);
 
-		imagesIndex++;
-		currentImage++;
-	}
-	// struct Image *imageTest = initImages();
-		
-	// detectDirection(imageTest, 4, &in, &out);
-	// printf("In - %d, Out - %d \n", in, out);
+	// 	imagesIndex++;
+	// 	currentImage++;
+	// }
+	// int array[768];
+	// for (int i = 0; i < 24; ++i)
+	// {
+	// 	for (int j = 0; j < 32; ++j)
+	// 	{
+	// 		if (j < 10) {
+	// 			array[i * 32 + j] = 1;
+	// 		}else if (j > 16) {
+	// 			array[i * 32 + j] = 1;
+	// 		}else {
+	// 			array[i * 32 + j] = 0;
+	// 		}
+	// 	}
+	// }
+	// printIntMatrix(outputfile, array, 32, 24);
+
+	struct Image *imageTest = initImages();
+	printf("1st test\n");	
+	detectDirection(imageTest, 4, &in, &out);
+	
+	// in = out = 0;
+	imageTest = initImages2();
+	printf("2nd test\n");
+	detectDirection(imageTest, 4, &in, &out);
+	// in = out = 0;
+	imageTest = initImages3();
+	printf("3rd test\n");
+	detectDirection(imageTest, 4, &in, &out);
+	// in = out = 0;
+	imageTest = initImages4();
+	printf("4th test\n");
+	detectDirection(imageTest, 4, &in, &out);
+
+	// in = out = 0;
+	imageTest = initImages5();
+	printf("5th test\n");
+	detectDirection(imageTest, 4, &in, &out);
 	// int from[2] = { 2, 3 };
 	// printf("x - %d, y - %d\n", from[0], from[1]);
 	// for (int i = 0; i < 2; ++i)

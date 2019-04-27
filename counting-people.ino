@@ -208,10 +208,10 @@ void loop()
 	
 	
 	doSomethingWithResult();
-	// stopTime = millis();
-	// Serial.print("Loop time: ");
-	// Serial.print(stopTime - startTime);
-	// Serial.println(" ms");
+	stopTime = millis();
+	Serial.print("Loop time: ");
+	Serial.print(stopTime - startTime);
+	Serial.println(" ms");
 }
 char blinking = 0;
 
@@ -254,7 +254,7 @@ void doSomethingWithResult() {
 			}
 			
 			imagesIndex++;
-			if (startTime - lastSend >= 120 * 1000) {
+			if (startTime - lastSend >= 60 * 1000) {
 				char str[20];
 				sprintf(str, "in: %d, out: %d", in, out);
 				sendData(str);
@@ -264,10 +264,10 @@ void doSomethingWithResult() {
 		}
 
 	}else {
-		state = digitalRead(HCSR501_PIN);
-		if (state == HIGH) {
-			return;
-		}
+		// state = digitalRead(HCSR501_PIN);
+		// if (state == HIGH) {
+		// 	return;
+		// }
 		trainingCycles++;
 		if (trainingCycles < 5) {
 			free(numbers);
