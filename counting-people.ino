@@ -172,8 +172,7 @@ int stdevsCounter = 0;
 long lastSend = 0;
 
 void loop()
-{
-	
+{	
 	startTime = millis();
 	memset(mlx90640To, 0, sizeof(float) * 768);
 	
@@ -209,9 +208,9 @@ void loop()
 	
 	doSomethingWithResult();
 	stopTime = millis();
-	Serial.print("Loop time: ");
-	Serial.print(stopTime - startTime);
-	Serial.println(" ms");
+	// Serial.print("Loop time: ");
+	// Serial.print(stopTime - startTime);
+	// Serial.println(" ms");
 }
 char blinking = 0;
 
@@ -229,6 +228,7 @@ void doSomethingWithResult() {
 		numbers = applyGaussian(mlx90640To, 32, 24);
 		
 		float stdDev = getStdDev(numbers, 768);
+		// Serial.println(stdDev);
 		if (stdDev > maxOfBackground) {
 			
 
@@ -243,7 +243,7 @@ void doSomethingWithResult() {
 			int *detected = detectPeople(numbers, mlx90640To, 32, 24, images[imagesIndex].people, &peopleSize);
 			images[imagesIndex].size = peopleSize;
 			images[imagesIndex].time = millis();
-
+			// printIntArray(detected, 768);
 			
 			for (int i = 0; i < peopleSize; ++i){
 				printf("Man detected at x - %d, y - %d\n",  images[imagesIndex].people[i].x, images[imagesIndex].people[i].y);
@@ -254,13 +254,14 @@ void doSomethingWithResult() {
 			}
 			
 			imagesIndex++;
-			if (startTime - lastSend >= 60 * 1000) {
-				char str[20];
-				sprintf(str, "in: %d, out: %d", in, out);
-				sendData(str);
-				lastSend = millis();
-			}
+			
 		
+		}
+		if (startTime - lastSend >= 60 * 1000) {
+			char str[20];
+			sprintf(str, "in: %d, out: %d", in, out);
+			sendData(str);
+			lastSend = millis();
 		}
 
 	}else {
@@ -280,6 +281,7 @@ void doSomethingWithResult() {
 		stdevsCounter++;
 		if (stdevsCounter > 3) {
 			stdDev = (stdevs[stdevsCounter - 1] + stdevs[stdevsCounter - 2] + stdevs[stdevsCounter - 3]) / 3;
+			Serial.print("T: ");
 			Serial.println(stdDev);
 			if (stdDev > maxOfBackground){
 				maxOfBackground = stdDev;

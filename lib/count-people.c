@@ -1104,11 +1104,12 @@ void addEdges(struct Graph *graph) {
 					graph->frames[i].vertices[j].edges[edgesSize].correctionEdge = graph->frames[i].vertices[j].edgesSize == 0 ? FALSE : TRUE;
 
 					int *from = calculateMotionVector(graph, graph->frames[i].vertices[j]);
+					// int from[2] = { graph->frames[i].vertices[j].human->x, graph->frames[i].vertices[j].human->y };
 					int to[2] = { graph->frames[graph->frameSize].vertices[k].human->x, graph->frames[graph->frameSize].vertices[k].human->y };
 
 					int *subtracted = subtract2dVector(from, to, 2);
 					// Gain function specified in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.2.7478&rep=rep1&type=pdf 
-					float weight = 0 - (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2)))) + 100000;
+					float weight = (alpha * (0.5 + (dotProduct(from, to, 2)/ 2 * norm(to, 2) * norm(from, 2))) + (1 - alpha) * (1 - (norm(subtracted, 2))/sqrt(pow(32,2) + pow(24,2))));
 					
 					graph->frames[i].vertices[j].edges[edgesSize].weight = weight;
 					graph->frames[i].vertices[j].edgesSize++;
@@ -1247,8 +1248,13 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 		}
 
 		linreg(counters[i], paths[i], &m, &b,&r);
-		printf("m - %f\n", m);
-		if (m > 2) {
+
+		printf("m - %f r - %f\n", m, r);
+		if (r > 5) {
+			printf("Probably standing!\n");
+			continue;
+		}
+		if (m > 1) {
 			printf("Path %d - IN\n", i);
 			*in = *in + 1;
 			for (int j = 0; j < counters[i]; ++j)
@@ -1257,7 +1263,7 @@ void evaluateInsAndOuts(struct Graph *graph, int *in, int *out) {
 			}
 		}
 
-		if (m < -2) {
+		if (m < -1) {
 			printf("Path %d - OUT\n", i);
 			*out = *out + 1;
 			for (int j = 0; j < counters[i]; ++j)
@@ -1588,6 +1594,64 @@ struct Image* initImages5() {
 	return image;
 }
 
+//Two people and two people against each other
+struct Image* initImages6() {
+	struct Image *image = (struct Image*) malloc(IMAGE_NUM * sizeof(struct Image));
+	image[0].size = 4;
+	image[0].people[0].x = 11;
+	image[0].people[0].y = 24;
+	image[0].people[1].x = 2;
+	image[0].people[1].y = 2;
+	image[0].people[2].x = 11;
+	image[0].people[2].y = 20;
+	image[0].people[3].x = 2;
+	image[0].people[3].y = 5;
+
+	image[1].size = 4;
+	image[1].people[0].x = 11;
+	image[1].people[0].y = 20;
+	image[1].people[1].x = 2;
+	image[1].people[1].y = 5;
+	image[1].people[2].x = 11;
+	image[1].people[2].y = 16;
+	image[1].people[3].x = 2;
+	image[1].people[3].y = 10;
+
+	image[2].size = 0;
+
+	image[3].size = 4;
+	image[3].people[0].x = 11;
+	image[3].people[0].y = 7;
+	image[3].people[1].x = 3;
+	image[3].people[1].y = 15;
+	image[3].people[2].x = 11;
+	image[3].people[2].y = 4;
+	image[3].people[3].x = 3;
+	image[3].people[3].y = 19;
+	
+	image[4].size = 4;
+	image[4].people[0].x = 10;
+	image[4].people[0].y = 3;
+	image[4].people[1].x = 2;
+	image[4].people[1].y = 19;
+	image[4].people[2].x = 10;
+	image[4].people[2].y = 1;
+	image[4].people[3].x = 2;
+	image[4].people[3].y = 23;
+
+	image[0].people[0].alreadyCounted = 0;
+	image[0].people[1].alreadyCounted = 0;
+	image[1].people[0].alreadyCounted = 0;
+	image[1].people[1].alreadyCounted = 0;
+	image[2].people[0].alreadyCounted = 0;
+	image[2].people[1].alreadyCounted = 0;
+	image[3].people[0].alreadyCounted = 0;
+	image[3].people[1].alreadyCounted = 0;
+	image[4].people[0].alreadyCounted = 0;
+	image[4].people[1].alreadyCounted = 0;
+
+	return image;
+}
 
 int main ( void )
 {
@@ -1746,6 +1810,10 @@ int main ( void )
 	// in = out = 0;
 	imageTest = initImages5();
 	printf("5th test\n");
+	detectDirection(imageTest, 4, &in, &out);
+
+	imageTest = initImages6();
+	printf("6th test\n");
 	detectDirection(imageTest, 4, &in, &out);
 	// int from[2] = { 2, 3 };
 	// printf("x - %d, y - %d\n", from[0], from[1]);

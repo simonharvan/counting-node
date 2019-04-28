@@ -9,7 +9,7 @@ void setup() {
   //noStroke();
   
   colorMode(HSB, 360, 100, 100);
-  lines = loadStrings("/Users/simonharvan/Documents/Development/Arduino/counting-people/lib/output");
+  lines = loadStrings("/Users/simonharvan/Documents/Development/Arduino/counting-people/lib/tmp-8");
 }
 
 void draw() {
@@ -52,7 +52,6 @@ void draw() {
   // for each of the 768 values, map the temperatures between min and max
   // to the blue through red portion of the color space
   for (int q = 0; q < 768; q++) {
-  
     if (!Float.isNaN(float(splitString[q]))) {
       temps[q] = constrain(map(float(splitString[q]), minTemp, maxTemp, 180, 360), 160, 360);
     } else {
